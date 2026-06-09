@@ -1,0 +1,39 @@
+name: Test FSC Access
+
+on:
+  workflow_dispatch:  # 수동 실행
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check outbound IP
+        run: curl -s https://checkip.amazonaws.com
+
+      - name: Test FSC connection (plain curl)
+        run: |
+          echo "=== HTTP 상태 코드 ==="
+          curl -s -o /dev/null -w "%{http_code}" \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Accept-Language: ko-KR,ko;q=0.9" \
+            --max-time 15 \
+            "https://www.fsc.go.kr/no010101" || echo "FAILED"
+
+      - name: Parse FSC press releases
+        run: |
+          echo "=== 보도자료 파싱 ==="
+          curl -s \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Accept: text/html" \
+            -H "Accept-Language: ko-KR,ko;q=0.9" \
+            --max-time 15 \
+            "https://www.fsc.go.kr/no010101" | \
+            grep -oP '(?<=href="/no010101/)\d+' | head -5 || echo "링크 없음"
+
+          curl -s \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Accept: text/html" \
+            -H "Accept-Language: ko-KR,ko;q=0.9" \
+            --max-time 15 \
+            "https://www.fsc.go.kr/no010101" | \
+            grep -oP '\d{4}-\d{2}-\d{2}' | head -5 || echo "날짜 없음"
