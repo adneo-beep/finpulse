@@ -1,0 +1,15 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/finpulse.html" }
+  ],
+  "functions": {
+    "api/collect.js": {
+      "regions": ["icn1"],
+      "maxDuration": 60
+    },
+    "api/debug.js": {
+      "regions": ["icn1"],
+      "maxDuration": 30
+    }
+  }
+}

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinPulse — 한국 금융당국 보도자료 모니터</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      --bg:         #f6f8fa;
+      --surface:    #ffffff;
+      --border:     #e2e8f0;
+      --border-mid: #cbd5e1;
+      --text-1:     #0f172a;
+      --text-2:     #475569;
+      --text-3:     #94a3b8;
+      --fsc:        #2563eb;
+      --fss:        #16a34a;
+      --bok:        #d97706;
+      --reb:        #7c3aed;
+      --accent:     #2563eb;
+      --radius-lg:  16px;
+      --shadow-sm:  0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-md:  0 4px 16px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans KR','Inter',sans-serif; background: var(--bg); color: var(--text-1); min-height: 100vh; }
+    a { text-decoration: none; color: inherit; }
+
+    /* ── HEADER ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
+    .header-inner { max-width: 1040px; margin: 0 auto; padding: 0 20px; height: 48px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand-mark { width: 26px; height: 26px; background: linear-gradient(135deg,#2563eb 0%,#7c3aed 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-family:'Inter',sans-serif; font-weight: 800; font-size: 11px; color: #fff; letter-spacing: -.5px; }
+    .brand-name { font-family:'Inter',sans-serif; font-weight: 800; font-size: 15px; background: linear-gradient(90deg,#2563eb,#7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .brand-sub { font-size: 11px; color: var(--text-3); margin-left: 2px; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .last-updated { font-size: 11px; color: var(--text-3); }
+    .last-updated b { color: var(--text-2); font-weight: 500; }
+
+    .btn-collect { display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; font-family:'Noto Sans KR',sans-serif; cursor: pointer; transition: background .18s, transform .12s, box-shadow .18s; box-shadow: 0 1px 4px rgba(37,99,235,.25); }
+    .btn-collect:hover { background: #1d4ed8; box-shadow: 0 3px 10px rgba(37,99,235,.35); }
+    .btn-collect:active { transform: scale(.97); }
+    .btn-collect:disabled { background: #93c5fd; cursor: not-allowed; box-shadow: none; }
+    .btn-collect svg { transition: transform .6s; flex-shrink: 0; }
+    .btn-collect.loading svg { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── MAIN ── */
+    main { max-width: 1040px; margin: 0 auto; padding: 18px 20px 48px; }
+
+    .status-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 10px; flex-wrap: wrap; }
+    .status-left { display: flex; align-items: center; gap: 7px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.5);} 50%{opacity:.6;box-shadow:0 0 0 5px rgba(34,197,94,0);} }
+    .status-text { font-size: 12px; color: var(--text-2); }
+    .status-text strong { color: var(--text-1); }
+    .period-pill { font-size: 11px; font-weight: 500; color: var(--accent); background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 20px; padding: 3px 11px; }
+
+    /* ── 카드 그리드 ── */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; transition: box-shadow .2s, border-color .2s; }
+    .card:hover { box-shadow: var(--shadow-md); border-color: var(--card-color, var(--border-mid)); }
+    .card[data-c="fsc"] { --card-color: #bfdbfe; }
+    .card[data-c="fss"] { --card-color: #bbf7d0; }
+    .card[data-c="bok"] { --card-color: #fde68a; }
+    .card[data-c="reb"] { --card-color: #ddd6fe; }
+
+    .card-head { padding: 11px 14px 10px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .card-title-row { display: flex; align-items: center; gap: 10px; }
+    .inst-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+    .icon-fsc{background:#eff6ff;} .icon-fss{background:#f0fdf4;} .icon-bok{background:#fffbeb;} .icon-reb{background:#f5f3ff;}
+    .inst-name { font-size: 14px; font-weight: 700; }
+    .name-fsc{color:var(--fsc);} .name-fss{color:var(--fss);} .name-bok{color:var(--bok);} .name-reb{color:var(--reb);}
+    .inst-domain { font-size: 11px; color: var(--text-3); margin-top: 1px; font-family:'Inter',monospace; }
+    .count-chip { font-size: 11px; font-weight: 600; border-radius: 20px; padding: 3px 10px; }
+    .chip-some { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .chip-none { background: var(--bg); color: var(--text-3); border: 1px solid var(--border); }
+
+    /* 목록 */
+    .press-item { border-bottom: 1px solid var(--border); }
+    .press-item:last-child { border-bottom: none; }
+    .pi-head { display: flex; align-items: flex-start; gap: 8px; padding: 9px 14px; cursor: pointer; transition: background .12s; }
+    .pi-head:hover { background: var(--bg); }
+
+    .date-chip { font-size: 10px; font-weight: 700; font-family:'Inter',sans-serif; padding: 2px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+    .dc-fsc{background:#eff6ff;color:var(--fsc);} .dc-fss{background:#f0fdf4;color:var(--fss);} .dc-bok{background:#fffbeb;color:var(--bok);} .dc-reb{background:#f5f3ff;color:var(--reb);}
+
+    .pi-title { flex: 1; font-size: 12.5px; font-weight: 500; color: var(--text-1); line-height: 1.6; }
+    .pi-title a:hover { color: var(--accent); text-decoration: underline; }
+    .pi-arrow { color: var(--text-3); font-size: 10px; flex-shrink: 0; margin-top: 3px; transition: transform .2s; }
+    .press-item.open .pi-arrow { transform: rotate(180deg); }
+
+    .pi-body { display: none; padding: 4px 16px 13px 46px; background: var(--bg); border-top: 1px solid var(--border); }
+    .press-item.open .pi-body { display: block; }
+    .pi-body ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .pi-body li { font-size: 12px; color: var(--text-2); line-height: 1.65; padding-left: 12px; position: relative; }
+    .pi-body li::before { content: '·'; position: absolute; left: 0; color: var(--text-3); font-weight: 700; }
+
+    /* ── 로딩 오버레이 ── */
+    .overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(255,255,255,.82); backdrop-filter: blur(6px); align-items: center; justify-content: center; flex-direction: column; gap: 18px; }
+    .overlay.on { display: flex; }
+    .spinner { width: 44px; height: 44px; border: 3px solid #e2e8f0; border-top-color: var(--accent); border-radius: 50%; animation: spin .75s linear infinite; }
+    .ov-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+    .ov-step  { font-size: 13px; color: var(--text-3); min-height: 20px; }
+
+    /* ── 토스트 ── */
+    .toast { position: fixed; bottom: 26px; right: 26px; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 18px; display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-1); box-shadow: 0 8px 30px rgba(0,0,0,.12); transform: translateY(80px); opacity: 0; transition: transform .32s cubic-bezier(.175,.885,.32,1.275), opacity .28s; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── FOOTER ── */
+    footer { background: var(--surface); border-top: 1px solid var(--border); padding: 28px 24px; }
+    .footer-inner { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .footer-links { display: flex; gap: 18px; flex-wrap: wrap; }
+    .footer-links a { font-size: 12.5px; color: var(--accent); font-weight: 500; }
+    .footer-links a:hover { text-decoration: underline; }
+    .footer-desc { font-size: 12px; color: var(--text-3); line-height: 1.85; }
+  </style>
+</head>
+<body>
+
+<div class="overlay" id="overlay">
+  <div class="spinner"></div>
+  <div class="ov-title">보도자료 수집 중...</div>
+  <div class="ov-step" id="ovStep">금융위원회 게시판 확인 중</div>
+</div>
+<div class="toast" id="toast"><span id="toastIcon">✅</span><span id="toastMsg"></span></div>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-mark">FP</div>
+      <div>
+        <span class="brand-name">FinPulse</span>
+        <span class="brand-sub">한국 금융당국 보도자료 모니터</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="last-updated">수집 기준&nbsp;<b id="lastUpdated">–</b></div>
+      <button class="btn-collect" id="btnCollect" onclick="collect()">
+        <svg id="btnIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+        </svg>
+        지금 수집
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="status-row">
+    <div class="status-left">
+      <div class="live-dot"></div>
+      <div class="status-text"><strong>4개 기관</strong> 모니터링 중 &nbsp;·&nbsp; 총 <strong id="totalCnt">–</strong>건 수집</div>
+    </div>
+    <div class="period-pill" id="periodPill">수집 전</div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ① 금융위원회 -->
+    <div class="card" data-c="fsc">
+      <div class="card-head">
+        <div class="card-title-row">
+          <div class="inst-icon icon-fsc">🏛️</div>
+          <div>
+            <div class="inst-name name-fsc">금융위원회</div>
+            <div class="inst-domain">fsc.go.kr</div>
+          </div>
+        </div>
+        <span class="count-chip chip-none" id="cnt-fsc">–</span>
+      </div>
+      <div id="items-fsc" class="card-items"><div class="card-loading">수집 버튼을 눌러 최신 보도자료를 가져오세요</div></div>
+
+    </div><!-- /fsc card -->
+
+    <!-- ② 금융감독원 -->
+    <div class="card" data-c="fss">
+      <div class="card-head">
+        <div class="card-title-row">
+          <div class="inst-icon icon-fss">🔍</div>
+          <div>
+            <div class="inst-name name-fss">금융감독원</div>
+            <div class="inst-domain">fss.or.kr</div>
+          </div>
+        </div>
+        <span class="count-chip chip-none" id="cnt-fss">–</span>
+      </div>
+      <div id="items-fss" class="card-items"><div class="card-loading">수집 버튼을 눌러 최신 보도자료를 가져오세요</div></div>
+    </div><!-- /fss card -->
+
+    <!-- ③ 한국은행 -->
+    <div class="card" data-c="bok">
+      <div class="card-head">
+        <div class="card-title-row">
+          <div class="inst-icon icon-bok">🏦</div>
+          <div>
+            <div class="inst-name name-bok">한국은행</div>
+            <div class="inst-domain">bok.or.kr</div>
+          </div>
+        </div>
+        <span class="count-chip chip-none" id="cnt-bok">–</span>
+      </div>
+      <div id="items-bok" class="card-items"><div class="card-loading">수집 버튼을 눌러 최신 보도자료를 가져오세요</div></div>
+    </div><!-- /bok card -->
+
+    <!-- ④ 한국부동산원 -->
+    <div class="card" data-c="reb">
+      <div class="card-head">
+        <div class="card-title-row">
+          <div class="inst-icon icon-reb">🏠</div>
+          <div>
+            <div class="inst-name name-reb">한국부동산원</div>
+            <div class="inst-domain">reb.or.kr</div>
+          </div>
+        </div>
+        <span class="count-chip chip-none" id="cnt-reb">–</span>
+      </div>
+      <div id="items-reb" class="card-items"><div class="card-loading">수집 버튼을 눌러 최신 보도자료를 가져오세요</div></div>
+    </div><!-- /reb card -->
+
+  </div><!-- /grid -->
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://www.fsc.go.kr/no010101" target="_blank">🏛️ 금융위원회 보도자료</a>
+      <a href="https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218" target="_blank">🔍 금융감독원 보도자료</a>
+      <a href="https://www.bok.or.kr/portal/singl/newsData/list.do?menuNo=201263&programType=newsData&depth2=200038&depth3=201263" target="_blank">🏦 한국은행 보도자료</a>
+      <a href="https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9565&bbsId=1154" target="_blank">🏠 한국부동산원 보도자료</a>
+    </div>
+    <div class="footer-desc">
+      FinPulse는 금융위원회·금융감독원·한국은행·한국부동산원의 공식 보도자료를 자동 수집·요약하는 모니터링 서비스입니다.<br>
+      수집 대상은 최근 7일 이내 등록된 보도자료이며, 요약 내용은 참고용으로 정확한 내용은 원문을 확인해 주세요.<br>
+      「지금 수집」 버튼을 누르면 4개 기관 게시판을 즉시 재확인하고 최신 보도자료를 갱신합니다.<br>
+      본 서비스는 각 기관의 공식 입장을 대변하지 않으며, 원문 링크를 통해 직접 확인하시기를 권장합니다.
+    </div>
+  </div>
+</footer>
+
+<style>
+  .card-loading { padding: 20px 16px; font-size: 12px; color: var(--text-3); text-align: center; }
+  .card-error   { padding: 16px; font-size: 12px; color: #dc2626; background: #fef2f2; border-radius: 6px; margin: 8px 12px; }
+  .card-empty   { padding: 20px 16px; font-size: 12px; color: var(--text-3); text-align: center; }
+</style>
+
+<script>
+  // ── 아코디언 토글 ──
+  function toggle(el) {
+    const open = el.classList.contains('open');
+    el.closest('.card').querySelectorAll('.press-item.open').forEach(i => i.classList.remove('open'));
+    if (!open) el.classList.add('open');
+  }
+
+  // ── 날짜 포맷 ──
+  function fmtDate(str) {
+    if (!str) return '';
+    const m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[2]}.${m[3]}` : str.replace(/\d{4}[-.]/, '').replace(/[-.](\d{2})$/, '.$1').substring(0, 5);
+  }
+
+  // ── 카드 렌더 ──
+  function renderCard(key, items) {
+    const container = document.getElementById('items-' + key);
+    const cntEl     = document.getElementById('cnt-' + key);
+    if (!container) return;
+
+    if (!items || items.length === 0) {
+      container.innerHTML = '<div class="card-empty">최근 7일 이내 보도자료가 없습니다</div>';
+      cntEl.textContent = '0건';
+      cntEl.className = 'count-chip chip-none';
+      return;
+    }
+
+    const colorMap = { fsc:'dc-fsc', fss:'dc-fss', bok:'dc-bok', reb:'dc-reb' };
+    const dc = colorMap[key] || 'dc-fsc';
+
+    let html = '';
+    items.forEach(item => {
+      const dateLabel = fmtDate(item.date);
+      const bullets = (item.bullets || []).map(b => `<li>${b}</li>`).join('');
+      html += `
+        <div class="press-item" onclick="toggle(this)">
+          <div class="pi-head">
+            <span class="date-chip ${dc}">${dateLabel}</span>
+            <span class="pi-title">
+              <a href="${item.url}" target="_blank" onclick="event.stopPropagation()">${item.title}</a>
+            </span>
+            <span class="pi-arrow">▼</span>
+          </div>
+          <div class="pi-body"><ul>${bullets}</ul></div>
+        </div>`;
+    });
+    container.innerHTML = html;
+
+    cntEl.textContent = `${items.length}건`;
+    cntEl.className = items.length > 0 ? 'count-chip chip-some' : 'count-chip chip-none';
+  }
+
+  // ── 로딩 상태 ──
+  function setLoading(key) {
+    const container = document.getElementById('items-' + key);
+    if (container) container.innerHTML = '<div class="card-loading"><span class="spinner" style="display:inline-block;width:16px;height:16px;border-width:2px;vertical-align:middle;margin-right:6px;"></span>수집 중…</div>';
+    const cntEl = document.getElementById('cnt-' + key);
+    if (cntEl) { cntEl.textContent = '…'; cntEl.className = 'count-chip chip-none'; }
+  }
+
+  // ── 수집 메인 ──
+  async function collect() {
+    const btn = document.getElementById('btnCollect');
+    const overlay = document.getElementById('overlay');
+    const stepEl  = document.getElementById('ovStep');
+    btn.disabled  = true;
+    btn.classList.add('loading');
+    overlay.classList.add('on');
+
+    const steps = ['금융위원회 게시판 확인 중…','금융감독원 게시판 확인 중…','한국은행 보도자료 확인 중…','한국부동산원 게시판 확인 중…','데이터 정리 중…'];
+    let si = 0;
+    stepEl.textContent = steps[si];
+    ['fsc','fss','bok','reb'].forEach(setLoading);
+    const iv = setInterval(() => { si = Math.min(si + 1, steps.length - 1); stepEl.textContent = steps[si]; }, 1200);
+
+    try {
+      const res  = await fetch('/api/collect', { signal: AbortSignal.timeout(30000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      clearInterval(iv);
+      overlay.classList.remove('on');
+
+      const inst = data.institutions || {};
+      let total = 0;
+      ['fsc','fss','bok','reb'].forEach(k => {
+        const items = inst[k]?.items || [];
+        renderCard(k, items);
+        total += items.length;
+      });
+
+      // 상태 바 업데이트
+      document.getElementById('totalCnt').textContent = total;
+      const ts = new Date(data.timestamp || Date.now());
+      const pad = n => String(n).padStart(2,'0');
+      const dateStr = `${ts.getFullYear()}.${pad(ts.getMonth()+1)}.${pad(ts.getDate())}`;
+      const timeStr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+      document.getElementById('lastUpdated').textContent = `${dateStr} ${timeStr}`;
+
+      // 기간 표시
+      const sevenDaysAgo = new Date(ts); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      document.getElementById('periodPill').textContent =
+        `${sevenDaysAgo.getFullYear()}.${pad(sevenDaysAgo.getMonth()+1)}.${pad(sevenDaysAgo.getDate())} – ${dateStr}`;
+
+      showToast('✅', `수집 완료 — ${total}건의 보도자료를 가져왔습니다.`);
+    } catch (err) {
+      clearInterval(iv);
+      overlay.classList.remove('on');
+      console.error('collect error:', err);
+      showToast('⚠️', `수집 실패: ${err.message}. 잠시 후 다시 시도해 주세요.`);
+      ['fsc','fss','bok','reb'].forEach(k => {
+        const c = document.getElementById('items-' + k);
+        if (c && c.innerHTML.includes('수집 중')) {
+          c.innerHTML = '<div class="card-error">수집에 실패했습니다. 잠시 후 다시 시도해 주세요.</div>';
+        }
+      });
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+    }
+  }
+
+  function showToast(icon, msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toastIcon').textContent = icon;
+    document.getElementById('toastMsg').textContent  = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 5000);
+  }
+
+  // 페이지 로드 시 자동 수집
+  window.addEventListener('DOMContentLoaded', () => collect());
+</script>
+</body>
+</html>

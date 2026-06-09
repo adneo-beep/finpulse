@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calculator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f0ede8;
+      font-family: 'Courier New', monospace;
+    }
+
+    .calc {
+      width: 300px;
+      background: #f7f4ef;
+      border: 1.5px solid #1a1a1a;
+      padding: 28px 24px 24px;
+    }
+
+    /* Display */
+    .display {
+      border-bottom: 1.5px solid #1a1a1a;
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+      min-height: 72px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+
+    .display .expr {
+      font-size: 12px;
+      color: #888;
+      letter-spacing: 0.05em;
+      min-height: 16px;
+      word-break: break-all;
+      text-align: right;
+    }
+
+    .display .result {
+      font-size: 32px;
+      color: #1a1a1a;
+      letter-spacing: -0.02em;
+      word-break: break-all;
+      text-align: right;
+    }
+
+    /* Button grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    button {
+      background: transparent;
+      border: 1.5px solid #1a1a1a;
+      color: #1a1a1a;
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+      height: 52px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+      letter-spacing: 0.02em;
+      outline: none;
+    }
+
+    button:hover {
+      background: #1a1a1a;
+      color: #f7f4ef;
+    }
+
+    button:active {
+      background: #444;
+      color: #f7f4ef;
+    }
+
+    /* Special button styles */
+    button.op {
+      border-color: #1a1a1a;
+    }
+
+    button.action {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    button.equals {
+      background: #1a1a1a;
+      color: #f7f4ef;
+      grid-column: span 1;
+    }
+
+    button.equals:hover {
+      background: #333;
+    }
+
+    button.zero {
+      grid-column: span 2;
+    }
+
+    button.clear {
+      grid-column: span 2;
+    }
+  </style>
+</head>
+<body>
+  <div class="calc">
+    <div class="display">
+      <div class="expr" id="expr"></div>
+      <div class="result" id="result">0</div>
+    </div>
+
+    <div class="grid">
+      <button class="action clear" onclick="clearAll()">AC</button>
+      <button class="action"       onclick="toggleSign()">+/−</button>
+      <button class="action"       onclick="percent()">%</button>
+      <button class="op"           onclick="inputOp('/')">÷</button>
+
+      <button onclick="inputNum('7')">7</button>
+      <button onclick="inputNum('8')">8</button>
+      <button onclick="inputNum('9')">9</button>
+      <button class="op" onclick="inputOp('*')">×</button>
+
+      <button onclick="inputNum('4')">4</button>
+      <button onclick="inputNum('5')">5</button>
+      <button onclick="inputNum('6')">6</button>
+      <button class="op" onclick="inputOp('-')">−</button>
+
+      <button onclick="inputNum('1')">1</button>
+      <button onclick="inputNum('2')">2</button>
+      <button onclick="inputNum('3')">3</button>
+      <button class="op" onclick="inputOp('+')">+</button>
+
+      <button class="zero" onclick="inputNum('0')">0</button>
+      <button onclick="inputDot()">.</button>
+      <button class="equals" onclick="calculate()">=</button>
+    </div>
+  </div>
+
+  <script>
+    let current = '0';
+    let prev = null;
+    let operator = null;
+    let shouldReset = false;
+    let exprStr = '';
+
+    const resultEl = document.getElementById('result');
+    const exprEl = document.getElementById('expr');
+
+    function updateDisplay() {
+      resultEl.textContent = current;
+      exprEl.textContent = exprStr;
+    }
+
+    function inputNum(n) {
+      if (shouldReset) {
+        current = n;
+        shouldReset = false;
+      } else {
+        current = current === '0' ? n : current + n;
+        if (current.length > 12) current = current.slice(0, 12);
+      }
+      updateDisplay();
+    }
+
+    function inputDot() {
+      if (shouldReset) {
+        current = '0.';
+        shouldReset = false;
+      } else if (!current.includes('.')) {
+        current += '.';
+      }
+      updateDisplay();
+    }
+
+    function inputOp(op) {
+      const opSymbol = { '+': '+', '-': '−', '*': '×', '/': '÷' }[op];
+      if (prev !== null && !shouldReset) {
+        compute();
+        exprStr = format(current) + ' ' + opSymbol;
+      } else {
+        exprStr = format(current) + ' ' + opSymbol;
+      }
+      prev = parseFloat(current);
+      operator = op;
+      shouldReset = true;
+      updateDisplay();
+    }
+
+    function calculate() {
+      if (operator === null || prev === null) return;
+      const cur = parseFloat(current);
+      exprStr = format(prev) + ' ' + { '+': '+', '-': '−', '*': '×', '/': '÷' }[operator] + ' ' + format(cur) + ' =';
+      current = String(compute(prev, cur, operator));
+      current = formatNum(current);
+      prev = null;
+      operator = null;
+      shouldReset = true;
+      updateDisplay();
+    }
+
+    function compute(a, b, op) {
+      if (a === undefined) { a = prev; b = parseFloat(current); op = operator; }
+      let r;
+      if (op === '+') r = a + b;
+      else if (op === '-') r = a - b;
+      else if (op === '*') r = a * b;
+      else if (op === '/') r = b === 0 ? 'Error' : a / b;
+      if (r === 'Error') { current = 'Error'; return; }
+      current = formatNum(String(r));
+      return r;
+    }
+
+    function formatNum(n) {
+      if (n === 'Error') return 'Error';
+      const num = parseFloat(n);
+      if (isNaN(num)) return 'Error';
+      if (Math.abs(num) > 1e12) return num.toExponential(4);
+      const s = parseFloat(num.toPrecision(10)).toString();
+      return s.length > 12 ? parseFloat(num.toFixed(6)).toString() : s;
+    }
+
+    function format(n) {
+      if (typeof n === 'string') return n;
+      return parseFloat(n.toPrecision(10)).toString();
+    }
+
+    function clearAll() {
+      current = '0'; prev = null; operator = null; shouldReset = false; exprStr = '';
+      updateDisplay();
+    }
+
+    function toggleSign() {
+      if (current === '0' || current === 'Error') return;
+      current = current.startsWith('-') ? current.slice(1) : '-' + current;
+      updateDisplay();
+    }
+
+    function percent() {
+      const n = parseFloat(current);
+      current = formatNum(String(n / 100));
+      updateDisplay();
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key >= '0' && e.key <= '9') inputNum(e.key);
+      else if (e.key === '.') inputDot();
+      else if (e.key === '+') inputOp('+');
+      else if (e.key === '-') inputOp('-');
+      else if (e.key === '*') inputOp('*');
+      else if (e.key === '/') { e.preventDefault(); inputOp('/'); }
+      else if (e.key === 'Enter' || e.key === '=') calculate();
+      else if (e.key === 'Escape') clearAll();
+      else if (e.key === 'Backspace') {
+        if (current.length > 1 && current !== 'Error') current = current.slice(0, -1);
+        else current = '0';
+        updateDisplay();
+      }
+    });
+  </script>
+</body>
+</html>
