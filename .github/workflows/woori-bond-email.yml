@@ -1,0 +1,31 @@
+name: 우리은행 국민주택채권 시세 이메일
+
+on:
+  schedule:
+    # 매일 오전 9시 KST (UTC 00:00)
+    - cron: '0 0 * * 1-5'
+  workflow_dispatch: # 수동 실행 버튼
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run bond email script
+        env:
+          NAVER_APP_PASS: ${{ secrets.NAVER_APP_PASS }}
+          MAIL_FROM: adneo@naver.com
+          MAIL_TO: bh.won@samsung.com
+        run: node woori-bond-email.mjs
