@@ -1,9 +1,27 @@
 {
-  "name": "finpulse",
+  "name": "housing-dashboard-api",
   "version": "1.0.0",
+  "description": "부동산 시장동향 대시보드 API 서버",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "axios": "^1.4.0",
+    "cors": "^2.8.5",
+    "docx": "^9.7.1",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "playwright": "^1.60.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemailer": "^9.0.0"
   }
 }
