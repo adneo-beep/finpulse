@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>아파트담보대출 금리표</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1a1f2e 0%, #16213e 100%);
+    border-bottom: 1px solid #2d3748;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .header-left h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .badge {
+    background: #3b82f6;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    letter-spacing: 0.05em;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .date-chip {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #7dd3fc;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-primary:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+  .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+  .btn-secondary:hover { background: #334155; color: #e2e8f0; }
+
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 24px;
+  }
+
+  /* 상태 영역 */
+  #status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 80px 24px;
+    color: #64748b;
+    font-size: 0.95rem;
+    flex-direction: column;
+  }
+
+  .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #2d3748;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    background: #1e1b29;
+    border: 1px solid #7c3aed;
+    border-radius: 12px;
+    padding: 20px 28px;
+    color: #c4b5fd;
+    font-size: 0.9rem;
+    text-align: center;
+    max-width: 480px;
+  }
+
+  /* 안내 바 */
+  .notice-bar {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 0.82rem;
+    color: #94a3b8;
+    line-height: 1.7;
+    margin-bottom: 24px;
+  }
+  .notice-bar strong { color: #fbbf24; }
+
+  /* 카드 그리드 */
+  #cards-grid {
+    display: none;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+  }
+
+  .bank-card {
+    background: #1a1f2e;
+    border: 1px solid #2d3748;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .bank-card:hover { border-color: #3b82f6; }
+
+  .card-header {
+    background: linear-gradient(135deg, #1e2d4a 0%, #162033 100%);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #2d3748;
+  }
+
+  .bank-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  .bank-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .rate-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .rate-table thead tr {
+    background: #111827;
+  }
+
+  .rate-table th {
+    padding: 8px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .rate-table th:not(:first-child) { text-align: right; }
+
+  .rate-table td {
+    padding: 9px 14px;
+    font-size: 0.875rem;
+    color: #cbd5e1;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .rate-table tr:last-child td { border-bottom: none; }
+
+  .rate-table tr:hover td { background: #1e293b; }
+
+  .rate-table td:first-child { color: #94a3b8; font-size: 0.82rem; }
+
+  .rate-value {
+    text-align: right;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .rate-value.highlight { color: #60a5fa; }
+  .rate-value.dash { color: #374151; }
+
+  /* 신보출연료 탭 */
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+
+  .tab {
+    padding: 7px 18px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #2d3748;
+    background: #1a1f2e;
+    color: #94a3b8;
+    transition: all 0.2s;
+  }
+
+  .tab.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+  .tab:hover:not(.active) { background: #2d3748; color: #e2e8f0; }
+
+  #info-panel { display: none; }
+
+  /* 반응형 */
+  @media (max-width: 640px) {
+    header { padding: 16px; }
+    .header-left h1 { font-size: 1.1rem; }
+    main { padding: 16px 12px; }
+    #cards-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>🏦 아파트담보대출 금리표 <span class="badge">findsr.kr</span></h1>
+  </div>
+  <div class="header-right">
+    <span id="date-chip"></span>
+    <button class="btn btn-secondary" onclick="window.open('https://findsr.kr/new1/product.html','_blank')">원본 보기</button>
+    <button class="btn btn-primary" id="btn-refresh" onclick="loadRates()">↺ 새로고침</button>
+  </div>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('rates')">📊 금리표</div>
+    <div class="tab" onclick="switchTab('info')">ℹ️ 신보출연료</div>
+  </div>
+
+  <div id="status">
+    <div class="spinner"></div>
+    <span>AI로 금리 데이터를 분석하는 중... (약 10~20초 소요)</span>
+  </div>
+
+  <div id="rates-panel">
+    <div class="notice-bar" id="notice-bar" style="display:none">
+      <strong>※ 신보출연료 안내:</strong> ℹ️ 탭에서 확인하세요. &nbsp;|&nbsp;
+      <strong style="color:#94a3b8">출처:</strong> findsr.kr 최신 게시물 기준
+    </div>
+    <div id="cards-grid"></div>
+  </div>
+
+  <div id="info-panel">
+    <div class="notice-bar" style="display:block">
+      <strong>■ 신보출연료 가감표 (24,900만원 구간 기준 대비)</strong><br>
+      · ~12,450만원 이하: <strong style="color:#34d399">-0.04%p</strong><br>
+      · 24,900만원~49,800만원 이하: <strong style="color:#f87171">+0.14%p</strong><br>
+      · 49,800만원 초과: <strong style="color:#f87171">+0.17%p</strong><br><br>
+      <strong>■ 하나은행 신보출연료 (별도 적용)</strong><br>
+      · ~12,450만원 이하: <strong style="color:#34d399">-0.05%p</strong><br>
+      · 24,900만원~49,800만원 이하: <strong style="color:#f87171">+0.19%p</strong><br>
+      · 49,800만원 초과: <strong style="color:#f87171">+0.22%p</strong><br><br>
+      <strong style="color:#fbbf24">※ 농협은행·기업은행은 금액 구간별 자체 적용금리가 존재합니다.</strong><br>
+      <strong style="color:#7dd3fc">※ 적용은행: 국민, 우리, 신한, 하나, 농협, 기업, 부산</strong>
+    </div>
+  </div>
+</main>
+
+<script>
+let activeTab = 'rates';
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'rates') || (i === 1 && tab === 'info'));
+  });
+  document.getElementById('rates-panel').style.display = tab === 'rates' ? 'block' : 'none';
+  document.getElementById('info-panel').style.display = tab === 'info' ? 'block' : 'none';
+}
+
+function bankInitials(name) {
+  const map = {
+    'KB국민': 'KB', '국민': 'KB', '신한': '신한', '우리': '우리',
+    '하나': '하나', 'NH농협': 'NH', '농협': 'NH', 'IBK기업': 'IBK',
+    '기업': 'IBK', 'BNK부산': 'BN', '부산': 'BN', '경남': '경남',
+    '전북': '전북', '광주': '광주', 'SC제일': 'SC', '씨티': '씨티',
+    '카카오': '카카', '토스': '토스'
+  };
+  for (const [key, abbr] of Object.entries(map)) {
+    if (name.includes(key)) return abbr;
+  }
+  return name.slice(0, 2);
+}
+
+function renderCard(bank) {
+  const initials = bankInitials(bank.name);
+  const rows = bank.rates.map(r => {
+    const maemaeClass = r.매매 && r.매매 !== '-' ? 'rate-value highlight' : 'rate-value dash';
+    const gaGyeClass = r.가계 && r.가계 !== '-' ? 'rate-value highlight' : 'rate-value dash';
+    return `<tr>
+      <td>${r.type}</td>
+      <td class="${maemaeClass}">${r.매매 || '-'}</td>
+      <td class="${gaGyeClass}">${r.가계 || '-'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="bank-card">
+      <div class="card-header">
+        <div class="bank-icon">${initials}</div>
+        <span class="bank-name">${bank.name}</span>
+      </div>
+      <table class="rate-table">
+        <thead>
+          <tr>
+            <th>금리유형</th>
+            <th>매매</th>
+            <th>가계</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function loadRates() {
+  const btn = document.getElementById('btn-refresh');
+  btn.disabled = true;
+  btn.textContent = '분석 중...';
+
+  const status = document.getElementById('status');
+  const grid = document.getElementById('cards-grid');
+  const noticeBar = document.getElementById('notice-bar');
+  const dateChip = document.getElementById('date-chip');
+
+  status.style.display = 'flex';
+  status.innerHTML = '<div class="spinner"></div><span>AI로 금리 데이터를 분석하는 중... (약 10~20초 소요)</span>';
+  grid.style.display = 'none';
+  noticeBar.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/loan-rates/parsed');
+    const data = await res.json();
+
+    if (!data.success) throw new Error(data.error || '파싱 실패');
+
+    dateChip.innerHTML = `<span class="date-chip">📅 ${data.date}</span>`;
+
+    grid.innerHTML = data.banks.map(renderCard).join('');
+    grid.style.display = 'grid';
+    noticeBar.style.display = 'block';
+    status.style.display = 'none';
+  } catch (err) {
+    status.innerHTML = `
+      <div class="error-box">
+        ⚠️ ${err.message}<br>
+        <button class="btn btn-primary" style="margin-top:16px" onclick="loadRates()">다시 시도</button>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '↺ 새로고침';
+  }
+}
+
+loadRates();
+</script>
+</body>
+</html>

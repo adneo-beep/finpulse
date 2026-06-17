@@ -28,4 +28,4 @@ jobs:
           NAVER_APP_PASS: ${{ secrets.NAVER_APP_PASS }}
           MAIL_FROM: adneo@naver.com
           MAIL_TO: bh.won@samsung.com
-        run: node woori-bond-email.mjs
+        run: node bond-report/woori-bond-email.mjs

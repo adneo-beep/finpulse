@@ -61,69 +61,33 @@ function stripHtml(s) {
     .replace(/&#\d+;/g,'').trim();
 }
 
-// ── 1. 금융위원회 — 네이버 뉴스 검색 API ──────────────
+// ── 1. 금융위원회 — 네이버 뉴스 검색 API (fsc.go.kr 해외 클라우드 IP 차단으로 우회) ──
 async function fetchFSC() {
   try {
     const clientId     = process.env.NAVER_CLIENT_ID;
     const clientSecret = process.env.NAVER_CLIENT_SECRET;
     if (!clientId || !clientSecret) throw new Error('Naver API key missing');
-
-    // 금융위원회 공식 보도자료 발표 기사만 수집
-    // — 두 쿼리 병렬 요청으로 커버리지 확대
-    const queries = [
-      '금융위원회 보도자료 발표',
-      '금융위원회 금융정책',
-    ];
     const sevenDaysAgo = todayMinus(7);
-    const allNews = [];
-
-    await Promise.all(queries.map(async q => {
-      const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(q)}&display=20&sort=date`;
-      const res = await fetch(url, {
-        headers: {
-          'X-Naver-Client-Id':     clientId,
-          'X-Naver-Client-Secret': clientSecret,
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-      const json = await res.json();
-      if (json.items) allNews.push(...json.items);
-    }));
-
+    const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent('금융위')}&display=20&sort=date`;
+    const res = await fetch(url, {
+      headers: { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret },
+      signal: AbortSignal.timeout(10000),
+    });
+    const json = await res.json();
     const items = [];
     const seenTitles = new Set();
-
-    for (const item of allNews) {
-      const rawTitle = stripHtml(item.title);
-      const rawDesc  = stripHtml(item.description || '');
-      const link     = item.originallink || item.link;
-
+    for (const item of (json.items || [])) {
+      const title   = stripHtml(item.title);
+      const link    = item.originallink || item.link;
       const pubDate = new Date(item.pubDate);
       if (isNaN(pubDate.getTime()) || pubDate < sevenDaysAgo) continue;
-
-      // 금융위원회 관련 기사만 (제목 또는 설명에 금융위 포함)
-      const isFSCRelated = rawTitle.includes('금융위') || rawDesc.includes('금융위원회');
-      if (!isFSCRelated) continue;
-
-      // 단순 시황/환율 뉴스 제외 (보도자료성 정책 기사만)
-      const isPolicy = rawTitle.includes('발표') || rawTitle.includes('시행') ||
-                       rawTitle.includes('개선') || rawTitle.includes('도입') ||
-                       rawTitle.includes('추진') || rawTitle.includes('마련') ||
-                       rawTitle.includes('강화') || rawTitle.includes('지원') ||
-                       rawTitle.includes('규제') || rawTitle.includes('제도') ||
-                       rawTitle.includes('대책') || rawTitle.includes('방안') ||
-                       rawTitle.includes('펀드') || rawTitle.includes('금지') ||
-                       rawTitle.includes('공시') || rawTitle.includes('감리') ||
-                       rawDesc.includes('보도자료');
-      if (!isPolicy) continue;
-
-      if (seenTitles.has(rawTitle)) continue;
-      seenTitles.add(rawTitle);
-
-      const pad = n => String(n).padStart(2,'0');
+      // 제목 앞 10글자 기준으로 유사 중복 제거
+      const titleKey = title.replace(/\s/g, '').slice(0, 15);
+      if ([...seenTitles].some(t => t === titleKey)) continue;
+      seenTitles.add(titleKey);
+      const pad = n => String(n).padStart(2, '0');
       const date = `${pubDate.getFullYear()}-${pad(pubDate.getMonth()+1)}-${pad(pubDate.getDate())}`;
-
-      items.push({ title: rawTitle, date, url: link });
+      items.push({ title, date, url: link });
       if (items.length >= 10) break;
     }
     return items;

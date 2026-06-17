@@ -27,4 +27,4 @@ jobs:
           NAVER_APP_PASS: ${{ secrets.NAVER_APP_PASS }}
           MAIL_FROM: adneo@naver.com
           MAIL_TO: sicimi.lim@samsung.com,bh.won@samsung.com
-        run: node price-detail-email.mjs
+        run: node housing-report/price-detail-email.mjs

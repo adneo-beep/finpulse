@@ -30,14 +30,16 @@
 
     /* ── HEADER ── */
     header { background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
-    .header-inner { max-width: 1040px; margin: 0 auto; padding: 0 20px; height: 48px; display: flex; align-items: center; justify-content: space-between; }
+    .header-inner { max-width: 1040px; margin: 0 auto; padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; }
     .brand { display: flex; align-items: center; gap: 8px; }
-    .brand-mark { width: 26px; height: 26px; background: linear-gradient(135deg,#2563eb 0%,#7c3aed 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-family:'Inter',sans-serif; font-weight: 800; font-size: 11px; color: #fff; letter-spacing: -.5px; }
-    .brand-name { font-family:'Inter',sans-serif; font-weight: 800; font-size: 15px; background: linear-gradient(90deg,#2563eb,#7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .brand-sub { font-size: 11px; color: var(--text-3); margin-left: 2px; }
+    .brand-mark { width: 26px; height: 26px; background: linear-gradient(135deg,#2563eb 0%,#7c3aed 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-family:'Inter',sans-serif; font-weight: 800; font-size: 11px; color: #fff; letter-spacing: -.5px; flex-shrink: 0; }
+    .brand-text { display: flex; flex-direction: column; gap: 1px; }
+    .brand-name { font-family:'Inter',sans-serif; font-weight: 800; font-size: 14px; background: linear-gradient(90deg,#2563eb,#7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1.2; }
+    .brand-sub { font-size: 11px; color: var(--text-3); }
+    .brand-updated { font-size: 11px; color: var(--text-3); line-height: 1.2; }
+    .brand-updated b { color: var(--text-2); font-weight: 500; }
     .header-right { display: flex; align-items: center; gap: 10px; }
-    .last-updated { font-size: 11px; color: var(--text-3); }
-    .last-updated b { color: var(--text-2); font-weight: 500; }
+    .last-updated { display: none; }
 
     .btn-collect { display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; font-family:'Noto Sans KR',sans-serif; cursor: pointer; transition: background .18s, transform .12s, box-shadow .18s; box-shadow: 0 1px 4px rgba(37,99,235,.25); }
     .btn-collect:hover { background: #1d4ed8; box-shadow: 0 3px 10px rgba(37,99,235,.35); }
@@ -74,11 +76,18 @@
     .inst-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
     .icon-fsc{background:#eff6ff;} .icon-fss{background:#f0fdf4;} .icon-bok{background:#fffbeb;} .icon-reb{background:#f5f3ff;}
     .inst-name { font-size: 14px; font-weight: 700; }
+    a.inst-link { text-decoration: none; cursor: pointer; }
+    a.inst-link:hover { text-decoration: underline; opacity: 0.85; }
     .name-fsc{color:var(--fsc);} .name-fss{color:var(--fss);} .name-bok{color:var(--bok);} .name-reb{color:var(--reb);}
     .inst-domain { font-size: 11px; color: var(--text-3); margin-top: 1px; font-family:'Inter',monospace; }
     .count-chip { font-size: 11px; font-weight: 600; border-radius: 20px; padding: 3px 10px; }
     .chip-some { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
     .chip-none { background: var(--bg); color: var(--text-3); border: 1px solid var(--border); }
+
+    /* 카드 안내 문구 */
+    .card-notice { font-size: 11px; color: var(--text-3); padding: 6px 12px 8px; border-top: 1px solid var(--border); background: #fffbeb; }
+    .card-notice a { color: var(--bok); text-decoration: none; }
+    .card-notice a:hover { text-decoration: underline; }
 
     /* 목록 */
     .press-item { border-bottom: 1px solid var(--border); }
@@ -133,13 +142,12 @@
   <div class="header-inner">
     <div class="brand">
       <div class="brand-mark">FP</div>
-      <div>
-        <span class="brand-name">FinPulse</span>
-        <span class="brand-sub">한국 금융당국 보도자료 모니터</span>
+      <div class="brand-text">
+        <div class="brand-name">금융당국 보도자료 모니터</div>
+        <div class="brand-updated">수집 기준&nbsp;<b id="lastUpdated">–</b></div>
       </div>
     </div>
     <div class="header-right">
-      <div class="last-updated">수집 기준&nbsp;<b id="lastUpdated">–</b></div>
       <button class="btn-collect" id="btnCollect" onclick="collect()">
         <svg id="btnIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
@@ -168,14 +176,14 @@
         <div class="card-title-row">
           <div class="inst-icon icon-fsc">🏛️</div>
           <div>
-            <div class="inst-name name-fsc">금융위원회</div>
+            <a class="inst-name name-fsc inst-link" href="https://www.fsc.go.kr/no010101" target="_blank">금융위원회</a>
             <div class="inst-domain">fsc.go.kr</div>
           </div>
         </div>
         <span class="count-chip chip-none" id="cnt-fsc">–</span>
       </div>
       <div id="items-fsc" class="card-items"><div class="card-loading">수집 버튼을 눌러 최신 보도자료를 가져오세요</div></div>
-
+      <div class="card-notice">⚠️ 해외 클라우드 IP 차단으로 네이버 뉴스 검색을 통해 수집됩니다. <a href="https://www.fsc.go.kr/no010101" target="_blank">공식 보도자료 페이지 →</a></div>
     </div><!-- /fsc card -->
 
     <!-- ② 금융감독원 -->
@@ -184,7 +192,7 @@
         <div class="card-title-row">
           <div class="inst-icon icon-fss">🔍</div>
           <div>
-            <div class="inst-name name-fss">금융감독원</div>
+            <a class="inst-name name-fss inst-link" href="https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218" target="_blank">금융감독원</a>
             <div class="inst-domain">fss.or.kr</div>
           </div>
         </div>
@@ -199,7 +207,7 @@
         <div class="card-title-row">
           <div class="inst-icon icon-bok">🏦</div>
           <div>
-            <div class="inst-name name-bok">한국은행</div>
+            <a class="inst-name name-bok inst-link" href="https://www.bok.or.kr/portal/singl/newsData/list.do?menuNo=201263&programType=newsData&depth2=200038&depth3=201263" target="_blank">한국은행</a>
             <div class="inst-domain">bok.or.kr</div>
           </div>
         </div>
@@ -214,7 +222,7 @@
         <div class="card-title-row">
           <div class="inst-icon icon-reb">🏠</div>
           <div>
-            <div class="inst-name name-reb">한국부동산원</div>
+            <a class="inst-name name-reb inst-link" href="https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9565&bbsId=1154" target="_blank">한국부동산원</a>
             <div class="inst-domain">reb.or.kr</div>
           </div>
         </div>
