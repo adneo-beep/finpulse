@@ -539,34 +539,27 @@ async function main() {
   const weeks = getWeeks();
   const weekLabels = weeks.slice(1).map(w => `${w.slice(0,4)}년${w.slice(4)}주`);
 
-  // KB 주간 날짜 문자열 (YYYYMMDD)
-  const kbLatestRes = await axios.get(`${KB_BASE}/latestDate`, {
-    params: { '매매전세코드': '01', '월간주간구분코드': '02', 'selectedTab': '0', 'period': '5', '탭구분코드': '0' },
-    timeout: 8000, headers: KB_HEADERS
-  });
-  const kbLatestDate = new Date(kbLatestRes.data.dataBody.data.최종일자);
-  const kbWeekDateStrings = [];
-  for (let i = 4; i >= 0; i--) {
-    const d = new Date(kbLatestDate);
-    d.setDate(kbLatestDate.getDate() - i * 7);
-    kbWeekDateStrings.push(
-      String(d.getFullYear()) + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0')
-    );
-  }
-
   console.log('📡 [1/3] R-ONE 20개 시도 매매/전세 조회 중...');
   const [saleRows20, leaseRows20] = await Promise.all([
     roneRows(RBONE_SALE_ID,  SIDO_20, weeks),
     roneRows(RBONE_LEASE_ID, SIDO_20, weeks),
   ]);
 
+  // R-ONE 기준 날짜 (Sheet1, Sheet2, Sheet3 모두 동일 기준)
   const weekDates = weeks.slice(1).map(w => {
     const raw = weekDateCache[w];
     if (!raw) return '';
     const d = new Date(raw);
     return `${d.getMonth()+1}.${d.getDate()}`;
   });
-  const kbWeekDates = kbWeekDateStrings.slice(1).map(ds => `${parseInt(ds.slice(4,6))}.${parseInt(ds.slice(6,8))}`);
+
+  // KB API 호출용 날짜 문자열 (YYYYMMDD) — R-ONE 날짜 기준으로 맞춤
+  // KB 데이터가 없는 주차(예: 목요일 발송 시 최신 주)는 빈칸으로 표시됨
+  const kbWeekDateStrings = weeks.map(w => {
+    const raw = weekDateCache[w];
+    if (!raw) return null;
+    return raw.replace(/-/g, '');
+  }).filter(Boolean);
 
   console.log('📡 [2/3] KB 심리지수 조회 중...');
   const { byRegion: kbByRegion, breakdownSale, breakdownLease, breakdownSaleTran, breakdownLeaseTran } = await fetchKbAll(kbWeekDateStrings);
@@ -590,7 +583,7 @@ async function main() {
   console.log('📊 Excel 생성 중...');
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, buildSheet1(weekLabels, weekDates, saleRows20, leaseRows20, kbCompositeRows), '주택시장동향 총괄');
-  XLSX.utils.book_append_sheet(wb, buildSheet2(weekLabels, kbWeekDates, kbByRegion, breakdownSale, breakdownLease, breakdownSaleTran, breakdownLeaseTran), 'KB 심리지수 상세');
+  XLSX.utils.book_append_sheet(wb, buildSheet2(weekLabels, weekDates, kbByRegion, breakdownSale, breakdownLease, breakdownSaleTran, breakdownLeaseTran), 'KB 심리지수 상세');
   XLSX.utils.book_append_sheet(wb, buildSheet3(weekLabels, weekDates, detailData), '시군구 세부');
 
   const excelBuf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
