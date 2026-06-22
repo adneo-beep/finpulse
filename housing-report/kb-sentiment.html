@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KB부동산 소비자 심리지수 · 지역별 세부</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+      font-size: 12px;
+      background: #f5f5f5;
+      color: #222;
+    }
+    h1 {
+      font-size: 16px;
+      padding: 14px 20px 6px;
+      color: #1a3a6c;
+    }
+    .subtitle {
+      font-size: 11px;
+      color: #666;
+      padding: 0 20px 12px;
+    }
+    #loading {
+      padding: 40px 20px;
+      text-align: center;
+      color: #888;
+      font-size: 14px;
+    }
+    #error {
+      display: none;
+      padding: 20px;
+      color: #c00;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      padding: 0 12px 20px;
+    }
+    table {
+      border-collapse: collapse;
+      min-width: 900px;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    }
+    th, td {
+      border: 1px solid #d0d0d0;
+      padding: 4px 6px;
+      text-align: center;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    thead th {
+      background: #1a3a6c;
+      color: #fff;
+      font-size: 11px;
+      padding: 6px 8px;
+    }
+    thead th.week-col {
+      background: #2a5298;
+      min-width: 68px;
+    }
+    .region-cell {
+      background: #e8edf5;
+      font-weight: bold;
+      font-size: 12px;
+      min-width: 46px;
+      writing-mode: horizontal-tb;
+    }
+    .region-cell.no-data {
+      background: #f0f0f0;
+      color: #aaa;
+    }
+    /* 지표명 셀 */
+    .ind-name {
+      text-align: left;
+      min-width: 110px;
+      font-size: 11px;
+      padding-left: 8px;
+    }
+    .ind-name.composite {
+      font-weight: bold;
+      color: #1a3a6c;
+      background: #f0f4fb;
+    }
+    .ind-name.sub {
+      color: #555;
+      padding-left: 16px;
+    }
+    .ind-name.na {
+      color: #bbb;
+    }
+    /* 섹션 구분선 */
+    tr.section-start td, tr.section-start th {
+      border-top: 2px solid #8899cc !important;
+    }
+    /* 값 */
+    .val { font-size: 11px; }
+    .val.pos { color: #cc0000; }
+    .val.neg { color: #0055cc; }
+    .val.zero { color: #555; }
+    .val.na { color: #ccc; }
+    /* 전주비 */
+    .chg { font-size: 11px; font-weight: bold; }
+    .chg.pos { color: #cc0000; }
+    .chg.neg { color: #0055cc; }
+    .chg.zero { color: #555; }
+    /* 구분색 */
+    .sec-1 td { background-color: #fffaf5; }
+    .sec-2 td { background-color: #f5fbff; }
+    .sec-3 td { background-color: #f5fff8; }
+    .sec-4 td { background-color: #fdf5ff; }
+    .sec-1 td.ind-name.composite { background: #fff3e8; }
+    .sec-2 td.ind-name.composite { background: #e8f3ff; }
+    .sec-3 td.ind-name.composite { background: #e8fff0; }
+    .sec-4 td.ind-name.composite { background: #f3e8ff; }
+    .sec-na td { background-color: #fafafa; color: #bbb; }
+
+    /* 지역 구분선 */
+    tr.region-start td {
+      border-top: 2px solid #aab !important;
+    }
+    /* 주차 헤더 날짜 */
+    .week-date { font-size: 10px; font-weight: normal; opacity: .8; }
+  </style>
+</head>
+<body>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 0">
+  <h1 style="padding:0">KB부동산 소비자 심리지수 · 지역별 세부</h1>
+  <a href="housing-table.html" style="font-size:12px;color:#1a3a6c;text-decoration:none;border:1px solid #1a3a6c;padding:3px 10px;border-radius:3px;">← 주택시장 동향</a>
+</div>
+<div class="subtitle" id="subtitle">로딩 중…</div>
+<div id="loading">데이터 불러오는 중…</div>
+<div id="error"></div>
+<div class="table-wrap" style="display:none" id="table-wrap">
+  <table id="main-table">
+    <thead>
+      <tr id="header-row">
+        <th style="min-width:46px">지역</th>
+        <th>지표명</th>
+        <th style="min-width:58px">지수<br>변동</th>
+        <th style="min-width:50px">전주비</th>
+        <!-- week cols injected -->
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+// 지역 순서 (표시 순서)
+const REGION_ORDER = [
+  { code: '0000000000', name: '전국' },
+  { code: null, name: '수도권' },   // KB 없음
+  { code: null, name: '지방권' },   // KB 없음
+  { code: '1100000000', name: '서울' },
+  { code: '4100000000', name: '경기' },
+  { code: '2800000000', name: '인천' },
+  { code: '5100000000', name: '강원' },
+  { code: '3600000000', name: '세종' },
+  { code: '3000000000', name: '대전' },
+  { code: '4300000000', name: '충북' },
+  { code: '4400000000', name: '충남' },
+  { code: '5200000000', name: '전북' },
+  { code: '4600000000', name: '전남' },
+  { code: '2900000000', name: '광주' },
+  { code: '5000000000', name: '제주' },
+  { code: '2700000000', name: '대구' },
+  { code: '4700000000', name: '경북' },
+  { code: '3100000000', name: '울산' },
+  { code: '2600000000', name: '부산' },
+  { code: '4800000000', name: '경남' },
+];
+
+// 지표 구조
+const INDICATOR_GROUPS = [
+  {
+    sec: 1, label: '매수우위지수',
+    subs: ['매수자많음', '비슷함', '매도자많음'],
+    composite: '매수우위지수',
+    compositeCategory: '매수우위지수',
+  },
+  {
+    sec: 2, label: '매매거래활발지수',
+    subs: ['활발함', '보통', '한산함'],
+    composite: '매매거래활발지수',
+    compositeCategory: '매매거래활발지수',
+  },
+  {
+    sec: 3, label: '전세수급지수',
+    subs: ['공급충분', '적절', '공급부족'],
+    composite: '전세수급지수',
+    compositeCategory: '전세수급지수',
+  },
+  {
+    sec: 4, label: '전세거래활발지수',
+    subs: ['활발함', '보통', '한산함'],
+    composite: '전세거래활발지수',
+    compositeCategory: '전세거래활발지수',
+  },
+];
+
+function fmt(v, decimals = 1) {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  if (isNaN(n)) return '';
+  return n.toFixed(decimals);
+}
+
+function fmtChg(v) {
+  if (v == null || v === '') return { text: '', cls: '' };
+  const n = Number(v);
+  if (isNaN(n)) return { text: '', cls: '' };
+  if (n > 0) return { text: '+' + n.toFixed(1), cls: 'pos' };
+  if (n < 0) return { text: '△' + Math.abs(n).toFixed(1), cls: 'neg' };
+  return { text: '―', cls: 'zero' };
+}
+
+async function loadAll() {
+  const BASE = window.location.origin;
+  const [bkRes, sentRes] = await Promise.all([
+    fetch(`${BASE}/api/apartment/kb-breakdown`).then(r => r.json()),
+    fetch(`${BASE}/api/apartment/kb-sentiment`).then(r => r.json()),
+  ]);
+
+  if (!bkRes.success || !sentRes.success) {
+    throw new Error((bkRes.error || sentRes.error || '데이터 오류'));
+  }
+  return { bk: bkRes, sent: sentRes };
+}
+
+function buildLookup(bk, sent) {
+  const RBONE_TO_KB = {
+    '50001': '0000000000', '50008': '1100000000', '50025': '2600000000',
+    '50150': '2700000000', '50124': '2800000000', '50159': '2900000000',
+    '50165': '3000000000', '50171': '3100000000', '50033': '3600000000',
+    '50016': '4100000000', '50185': '4300000000', '50194': '4400000000',
+    '50216': '4600000000', '50223': '4700000000', '50237': '4800000000',
+    '50250': '5000000000', '50177': '5100000000', '50207': '5200000000',
+  };
+
+  const lookup = {}; // key: `${kbCode}|${indicatorLabel}`
+
+  // trmSppsIndx 세부 (매수자많음/비슷함/매도자많음, 공급충분/적절/공급부족)
+  const allBreakdown = [
+    ...(bk.saleBreakdown || []),
+    ...(bk.leaseBreakdown || []),
+  ];
+  allBreakdown.forEach(group => {
+    group.regions.forEach(r => {
+      lookup[`${r.regionCode}|${group.label}`] = { value: r.value, change: r.change, trend: r.trend };
+    });
+  });
+
+  // trmTranIndx 세부 (활발함/보통/한산함 — 매매거래활발지수 + 전세거래활발지수)
+  // saleTranBreakdown의 활발함/보통/한산함은 sec=2(매매거래활발지수)용
+  // leaseTranBreakdown의 활발함/보통/한산함은 sec=4(전세거래활발지수)용
+  // 키 충돌 방지를 위해 접두사 구분
+  (bk.saleTranBreakdown || []).forEach(group => {
+    group.regions.forEach(r => {
+      lookup[`${r.regionCode}|saleTran|${group.label}`] = { value: r.value, change: r.change, trend: r.trend };
+    });
+  });
+  (bk.leaseTranBreakdown || []).forEach(group => {
+    group.regions.forEach(r => {
+      lookup[`${r.regionCode}|leaseTran|${group.label}`] = { value: r.value, change: r.change, trend: r.trend };
+    });
+  });
+
+  // Composite indices (areaHrtIndx from kb-sentiment)
+  sent.data.forEach(row => {
+    const kbCode = RBONE_TO_KB[row.regionId];
+    if (!kbCode) return;
+    lookup[`${kbCode}|${row.category}`] = { value: row.value, change: row.change, trend: row.trend };
+  });
+
+  return lookup;
+}
+
+function render(bk, sent) {
+  const kbWeekDates = bk.kbWeekDates || sent.kbWeekDates || [];
+  const weekCount = kbWeekDates.length; // 4
+
+  // Update subtitle
+  document.getElementById('subtitle').textContent =
+    `KB부동산 주간 심리지수 · 기준일: ${bk.latestDate || sent.latestDate} · 데이터 기준 최근 4주`;
+
+  // Inject week headers
+  const headerRow = document.getElementById('header-row');
+  kbWeekDates.forEach(wd => {
+    const th = document.createElement('th');
+    th.className = 'week-col';
+    th.innerHTML = wd;
+    headerRow.appendChild(th);
+  });
+
+  const lookup = buildLookup(bk, sent);
+  const tbody = document.getElementById('tbody');
+
+  REGION_ORDER.forEach((region, rIdx) => {
+    const noKB = region.code === null;
+    // Count total rows for this region
+    let totalRows = 0;
+    INDICATOR_GROUPS.forEach(g => {
+      if (noKB) {
+        totalRows += 1; // only composite shown as N/A
+      } else {
+        totalRows += g.subs.length + 1; // sub rows + composite
+      }
+    });
+
+    let firstRow = true;
+    INDICATOR_GROUPS.forEach((grp, gIdx) => {
+      const secClass = `sec-${grp.sec}`;
+      const indicators = noKB
+        ? [{ label: grp.composite, isComposite: true, na: true }]
+        : [
+            ...grp.subs.map(s => ({ label: s, isComposite: false, na: false })),
+            { label: grp.composite, isComposite: true, na: false },
+          ];
+
+      indicators.forEach((ind, indIdx) => {
+        const tr = document.createElement('tr');
+        tr.className = secClass + (noKB ? ' sec-na' : '');
+
+        // Region cell (rowspan on very first row of region)
+        if (firstRow) {
+          const td = document.createElement('td');
+          td.rowSpan = totalRows;
+          td.className = 'region-cell' + (noKB ? ' no-data' : '');
+          td.textContent = region.name;
+          tr.appendChild(td);
+          firstRow = false;
+          tr.classList.add('region-start');
+        }
+
+        // Section start styling
+        if (indIdx === 0 && gIdx > 0 && !noKB) {
+          tr.classList.add('section-start');
+        }
+
+        // Indicator name
+        const tdName = document.createElement('td');
+        tdName.className = 'ind-name' + (ind.isComposite ? ' composite' : ' sub') + (noKB ? ' na' : '');
+        tdName.textContent = ind.label;
+        tr.appendChild(tdName);
+
+        if (noKB) {
+          // Value/change/weeks all blank
+          ['', '', ...Array(weekCount).fill('')].forEach(v => {
+            const td = document.createElement('td');
+            td.className = 'val na';
+            td.textContent = v;
+            tr.appendChild(td);
+          });
+        } else {
+          // sec=2의 sub(활발함/보통/한산함) → saleTran prefix, sec=4 → leaseTran prefix
+          let lookupKey;
+          if (!ind.isComposite && grp.sec === 2) {
+            lookupKey = `${region.code}|saleTran|${ind.label}`;
+          } else if (!ind.isComposite && grp.sec === 4) {
+            lookupKey = `${region.code}|leaseTran|${ind.label}`;
+          } else {
+            lookupKey = `${region.code}|${ind.label}`;
+          }
+          const d = lookup[lookupKey];
+          const val = d?.value ?? null;
+          const chg = d?.change ?? null;
+          const trend = d?.trend || Array(weekCount).fill(null);
+
+          // 지수변동 (latest value)
+          const tdVal = document.createElement('td');
+          tdVal.className = 'val';
+          tdVal.textContent = fmt(val);
+          tr.appendChild(tdVal);
+
+          // 전주비
+          const { text: chgText, cls: chgCls } = fmtChg(chg);
+          const tdChg = document.createElement('td');
+          tdChg.className = `chg ${chgCls}`;
+          tdChg.textContent = chgText;
+          tr.appendChild(tdChg);
+
+          // Week columns (4 weeks trend)
+          for (let wi = 0; wi < weekCount; wi++) {
+            const tdW = document.createElement('td');
+            tdW.className = 'val';
+            tdW.textContent = fmt(trend[wi]);
+            tr.appendChild(tdW);
+          }
+        }
+
+        tbody.appendChild(tr);
+      });
+    });
+  });
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('table-wrap').style.display = '';
+}
+
+(async () => {
+  try {
+    const { bk, sent } = await loadAll();
+    render(bk, sent);
+  } catch (e) {
+    document.getElementById('loading').style.display = 'none';
+    const errEl = document.getElementById('error');
+    errEl.style.display = '';
+    errEl.textContent = '오류: ' + e.message;
+    document.getElementById('subtitle').textContent = '데이터 로드 실패';
+  }
+})();
+</script>
+</body>
+</html>
