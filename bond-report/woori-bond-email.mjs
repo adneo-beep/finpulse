@@ -2,17 +2,16 @@ import { chromium } from 'playwright';
 import nodemailer from 'nodemailer';
 
 const RECIPIENTS = [
-  // 테스트 완료 후 아래 수신자 주석 해제
-  // 'young_kyu.lee@samsung.com',
-  // 'rex.lee@samsung.com',
-  // 'eunjuoh.oh@samsung.com',
-  // 'hojoon.moon@samsung.com',
-  // 'cw0082.song@samsung.com',
-  // 'yejin.ahn@samsung.com',
-  // 'jh1973.choi@samsung.com',
-  // 'doohwan1.lee@samsung.com',
-  // 'eunok0412.park@samsung.com',
-  // 'minyoung520.jung@samsung.com',
+  'young_kyu.lee@samsung.com',
+  'rex.lee@samsung.com',
+  'eunjuoh.oh@samsung.com',
+  'hojoon.moon@samsung.com',
+  'cw0082.song@samsung.com',
+  'yejin.ahn@samsung.com',
+  'jh1973.choi@samsung.com',
+  'doohwan1.lee@samsung.com',
+  'eunok0412.park@samsung.com',
+  'minyoung520.jung@samsung.com',
   'bh.won@samsung.com',
 ];
 
