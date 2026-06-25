@@ -60,32 +60,44 @@ function stripHtml(s) {
 
 // ── 본문 HTML → 첫 2~3문장 추출 ──────────────────────
 function extractSentences(html, max = 3) {
-  const text = html
+  // 비본문 요소 제거
+  const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, '\n')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+
+  // 블록 요소를 줄바꿈으로 변환 후 태그 제거
+  const text = cleaned
+    .replace(/<\/?(p|div|li|tr|th|td|h[1-6]|br)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&[a-z#][a-z0-9]*;/gi, '')
     .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\n\s*/g, '\n')
     .trim();
 
-  // 단락 기준으로 분리 후 의미 있는 것만 추출
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map(p => p.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
-    .filter(p => p.length > 20 && p.length < 400 && !/^[\d\s\.\-\|]+$/.test(p));
+  const seen = new Set();
+  const lines = text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l =>
+      l.length > 25 &&
+      l.length < 500 &&
+      !/[|｜]/.test(l) &&                        // 네비게이션 구분자
+      !/바로가기|뉴스레터|Open API|관련사이트/.test(l) && // 스킵 링크
+      !/^[\d\s\.\-\(\)]+$/.test(l)               // 숫자/기호만 있는 줄
+    )
+    .filter(l => {
+      const key = l.slice(0, 15).replace(/\s/g, '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
-  if (paragraphs.length >= max) return paragraphs.slice(0, max);
-
-  // 단락이 부족하면 문장 단위로 분리
-  const allText = paragraphs.join(' ') || text.replace(/\s+/g, ' ').trim();
-  const sentences = allText
-    .split(/(?<=\.)\s+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 15 && s.length < 300);
-
-  return sentences.slice(0, max);
+  return lines.slice(0, max);
 }
 
 // ── 상세 페이지 본문 가져오기 ─────────────────────────
