@@ -59,8 +59,17 @@ function stripHtml(s) {
 }
 
 // ── 본문 HTML → 첫 2~3문장 추출 ──────────────────────
+function cleanText(s) {
+  return (s || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&[a-z#][a-z0-9]*;/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function extractSentences(html, max = 3) {
-  // 비본문 요소 제거
+  // 비본문 제거
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -69,9 +78,26 @@ function extractSentences(html, max = 3) {
     .replace(/<footer[\s\S]*?<\/footer>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '');
 
-  // 블록 요소를 줄바꿈으로 변환 후 태그 제거
+  const isJunk = t =>
+    t.length < 25 ||
+    t.length > 500 ||
+    /[|｜]/.test(t) ||
+    /바로가기|뉴스레터|Open API|관련사이트|계산기|피해구제|피해예방/.test(t) ||
+    /^[\d\s\.\-\(\)]+$/.test(t);
+
+  // 1순위: <p> 태그 본문 (실제 내용이 담긴 태그)
+  const pTexts = [];
+  const pPattern = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  let m;
+  while ((m = pPattern.exec(cleaned)) !== null) {
+    const t = cleanText(m[1]);
+    if (!isJunk(t)) pTexts.push(t);
+  }
+  if (pTexts.length >= 2) return pTexts.slice(0, max);
+
+  // 2순위: 블록 단위 줄 분리
   const text = cleaned
-    .replace(/<\/?(p|div|li|tr|th|td|h[1-6]|br)[^>]*>/gi, '\n')
+    .replace(/<\/?(div|li|tr|th|td|h[1-6]|br)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&[a-z#][a-z0-9]*;/gi, '')
@@ -80,24 +106,17 @@ function extractSentences(html, max = 3) {
     .trim();
 
   const seen = new Set();
-  const lines = text
+  return text
     .split('\n')
     .map(l => l.trim())
-    .filter(l =>
-      l.length > 25 &&
-      l.length < 500 &&
-      !/[|｜]/.test(l) &&                        // 네비게이션 구분자
-      !/바로가기|뉴스레터|Open API|관련사이트/.test(l) && // 스킵 링크
-      !/^[\d\s\.\-\(\)]+$/.test(l)               // 숫자/기호만 있는 줄
-    )
     .filter(l => {
+      if (isJunk(l)) return false;
       const key = l.slice(0, 15).replace(/\s/g, '');
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    });
-
-  return lines.slice(0, max);
+    })
+    .slice(0, max);
 }
 
 // ── 상세 페이지 본문 가져오기 ─────────────────────────
