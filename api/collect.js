@@ -169,32 +169,32 @@ async function fetchFSC() {
   }
 }
 
-// ── 2. 금융감독원 — 목록은 fss.or.kr, 요약은 Naver 검색 ──
-// FSS 상세 페이지는 JS 렌더링으로 plain fetch 불가. Naver 검색 description 활용.
-async function fetchFSSSnippets(titles) {
+// ── 2. 금융감독원 — 목록은 fss.or.kr, 요약은 제목별 Naver 개별 검색 ──
+// FSS 상세 페이지는 JS 렌더링으로 plain fetch 불가.
+// 각 항목 제목으로 Naver를 개별 검색해 제목에 정확히 매칭된 기사의 description 사용.
+async function naverSnippetForTitle(title) {
   try {
     const clientId     = process.env.NAVER_CLIENT_ID;
     const clientSecret = process.env.NAVER_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return {};
-    const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent('금융감독원 보도자료')}&display=30&sort=date`;
+    if (!clientId || !clientSecret) return null;
+    const query = `금융감독원 ${title}`;
+    const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=5&sort=date`;
     const res = await fetch(url, {
       headers: { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(6000),
     });
     const json = await res.json();
-    // 제목 앞 10글자로 매칭
-    const map = {};
+    const titleKey = title.replace(/\s/g, '');
     for (const item of (json.items || [])) {
       const naverTitle = stripHtml(item.title).replace(/\s/g, '');
-      for (const title of titles) {
-        const key = title.replace(/\s/g, '').slice(0, 10);
-        if (naverTitle.includes(key) && !map[title]) {
-          map[title] = stripHtml(item.description || '');
-        }
+      // 제목의 핵심 단어(앞 15자)가 Naver 결과 제목에 포함되면 매칭
+      if (naverTitle.includes(titleKey.slice(0, 15))) {
+        const desc = stripHtml(item.description || '').trim();
+        if (desc.length > 10) return desc;
       }
     }
-    return map;
-  } catch { return {}; }
+    return null;
+  } catch { return null; }
 }
 
 async function fetchFSS() {
@@ -220,12 +220,9 @@ async function fetchFSS() {
       items.push({ title, date, url: href });
     }
 
-    // Naver에서 요약 스니펫 보강
-    const snippetMap = await fetchFSSSnippets(items.map(i => i.title));
-    return items.map(i => ({
-      ...i,
-      snippet: snippetMap[i.title] || null,
-    }));
+    // 각 항목마다 제목으로 개별 Naver 검색 (병렬)
+    const snippets = await Promise.all(items.map(i => naverSnippetForTitle(i.title)));
+    return items.map((i, idx) => ({ ...i, snippet: snippets[idx] }));
   } catch (e) {
     console.error('FSS fetch error:', e.message);
     return [];
