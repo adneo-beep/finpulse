@@ -186,6 +186,9 @@ async function naverSnippetForTitle(title) {
     const json = await res.json();
     const titleKey = title.replace(/\s/g, '');
     for (const item of (json.items || [])) {
+      // fss.or.kr 직접 링크는 description이 사이드바 텍스트라 제외
+      const link = item.originallink || item.link || '';
+      if (link.includes('fss.or.kr')) continue;
       const naverTitle = stripHtml(item.title).replace(/\s/g, '');
       // 제목의 핵심 단어(앞 15자)가 Naver 결과 제목에 포함되면 매칭
       if (naverTitle.includes(titleKey.slice(0, 15))) {
