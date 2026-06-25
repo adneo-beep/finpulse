@@ -20,7 +20,6 @@ function fetchNoSSL(url, timeoutMs = 12000) {
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         clearTimeout(timer);
-        // 리다이렉트 처리
         if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
           fetchNoSSL(res.headers.location, timeoutMs).then(resolve).catch(reject);
         } else {
@@ -41,16 +40,14 @@ function todayMinus(days) {
 
 function parseDate(str) {
   if (!str) return null;
-  // 2026-06-08 or 2026.06.08 or 2026. 06. 08.
   const s = str.replace(/\s/g, '').replace(/\./g, '-').replace(/-$/, '');
   return new Date(s);
 }
 
 function isWithin7Days(dateStr) {
   const d = parseDate(dateStr);
-  if (!d || isNaN(d.getTime())) return true; // 날짜 파싱 실패 시 포함
-  const cutoff = todayMinus(7);
-  return d >= cutoff;
+  if (!d || isNaN(d.getTime())) return true;
+  return d >= todayMinus(7);
 }
 
 function stripHtml(s) {
@@ -61,7 +58,49 @@ function stripHtml(s) {
     .replace(/&#\d+;/g,'').trim();
 }
 
-// ── 1. 금융위원회 — 네이버 뉴스 검색 API (fsc.go.kr 해외 클라우드 IP 차단으로 우회) ──
+// ── 본문 HTML → 첫 2~3문장 추출 ──────────────────────
+function extractSentences(html, max = 3) {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&[a-z#][a-z0-9]*;/gi, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // 단락 기준으로 분리 후 의미 있는 것만 추출
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map(p => p.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(p => p.length > 20 && p.length < 400 && !/^[\d\s\.\-\|]+$/.test(p));
+
+  if (paragraphs.length >= max) return paragraphs.slice(0, max);
+
+  // 단락이 부족하면 문장 단위로 분리
+  const allText = paragraphs.join(' ') || text.replace(/\s+/g, ' ').trim();
+  const sentences = allText
+    .split(/(?<=\.)\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 15 && s.length < 300);
+
+  return sentences.slice(0, max);
+}
+
+// ── 상세 페이지 본문 가져오기 ─────────────────────────
+async function fetchDetailSummary(url, useNoSSL = false) {
+  try {
+    const html = useNoSSL
+      ? await fetchNoSSL(url, 8000)
+      : await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000) }).then(r => r.text());
+    return extractSentences(html);
+  } catch {
+    return [];
+  }
+}
+
+// ── 1. 금융위원회 — 네이버 뉴스 (Naver description 사용) ──
 async function fetchFSC() {
   try {
     const clientId     = process.env.NAVER_CLIENT_ID;
@@ -81,13 +120,14 @@ async function fetchFSC() {
       const link    = item.originallink || item.link;
       const pubDate = new Date(item.pubDate);
       if (isNaN(pubDate.getTime()) || pubDate < sevenDaysAgo) continue;
-      // 제목 앞 10글자 기준으로 유사 중복 제거
       const titleKey = title.replace(/\s/g, '').slice(0, 15);
       if ([...seenTitles].some(t => t === titleKey)) continue;
       seenTitles.add(titleKey);
       const pad = n => String(n).padStart(2, '0');
       const date = `${pubDate.getFullYear()}-${pad(pubDate.getMonth()+1)}-${pad(pubDate.getDate())}`;
-      items.push({ title, date, url: link });
+      // Naver description은 이미 기사 첫 문장 스니펫
+      const snippet = stripHtml(item.description || '');
+      items.push({ title, date, url: link, snippet });
       if (items.length >= 10) break;
     }
     return items;
@@ -104,19 +144,16 @@ async function fetchFSS() {
     const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
     const html = await res.text();
 
-    // 테이블 tbody tr 행에서 추출
     const items = [];
     const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
     let trMatch;
     while ((trMatch = trPattern.exec(html)) !== null) {
       const tr = trMatch[1];
-      // 제목 링크
       const linkMatch = tr.match(/<a[^>]+href="(\/fss\/bbs\/B0000188\/view\.do\?nttId=\d+[^"]*)"[^>]*>([\s\S]*?)<\/a>/);
       if (!linkMatch) continue;
-      const href = 'https://www.fss.or.kr' + linkMatch[1];
+      const href  = 'https://www.fss.or.kr' + linkMatch[1];
       const title = stripHtml(linkMatch[2]);
       if (!title || title.length < 5) continue;
-      // 날짜
       const dateMatch = tr.match(/(\d{4}-\d{2}-\d{2})/);
       if (!dateMatch) continue;
       const date = dateMatch[1];
@@ -133,23 +170,19 @@ async function fetchFSS() {
 // ── 3. 한국은행 (bok.or.kr) ────────────────────────────
 async function fetchBOK() {
   try {
-    // listCont.do: AJAX로 실제 목록 HTML을 반환하는 엔드포인트
     const url = 'https://www.bok.or.kr/portal/singl/newsData/listCont.do?pageIndex=&targetDepth=3&menuNo=201263&syncMenuChekKey=1&depthSubMain=&subMainAt=&searchCnd=1&searchKwd=&depth2=200038&depth3=201263';
     const html = await fetchNoSSL(url);
 
     const items = [];
     const usedTitles = new Set();
-    // <li class="bbsRowCls"> 블록 파싱
     const liPattern = /<li[^>]*bbsRowCls[^>]*>([\s\S]*?)<\/li>/g;
     let liMatch;
     while ((liMatch = liPattern.exec(html)) !== null) {
       const block = liMatch[1];
-      // 날짜
       const dateMatch = block.match(/<span class="date"[^>]*>[\s\S]*?(\d{4}\.\d{2}\.\d{2})/);
       if (!dateMatch) continue;
       const date = dateMatch[1].replace(/\./g, '-');
       if (!isWithin7Days(date)) continue;
-      // 링크 + 제목
       const linkMatch = block.match(/<a[^>]+href="(\/portal\/bbs\/[^"]+)"[^>]*class="title"[^>]*>([\s\S]*?)<\/a>/);
       if (!linkMatch) continue;
       const title = stripHtml(linkMatch[2].replace(/<!--[\s\S]*?-->/g, ''));
@@ -167,8 +200,8 @@ async function fetchBOK() {
 // ── 4. 한국부동산원 (reb.or.kr) ───────────────────────
 async function fetchREB() {
   try {
-    const url = 'https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9565&bbsId=1154';
-    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
+    const listUrl = 'https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9565&bbsId=1154';
+    const res = await fetch(listUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
     const html = await res.text();
 
     const items = [];
@@ -176,17 +209,20 @@ async function fetchREB() {
     let trMatch;
     while ((trMatch = trPattern.exec(html)) !== null) {
       const tr = trMatch[1];
-      // 제목 (링크는 javascript:이므로 텍스트만 추출)
       const linkMatch = tr.match(/<a[^>]*>([\s\S]*?)<\/a>/);
       if (!linkMatch) continue;
       const title = stripHtml(linkMatch[1]).replace(/새글/g, '').trim();
       if (!title || title.length < 5) continue;
-      // 날짜
       const dateMatch = tr.match(/(\d{4}\.\d{2}\.\d{2})/);
       if (!dateMatch) continue;
       const date = dateMatch[1].replace(/\./g, '-');
       if (!isWithin7Days(date)) continue;
-      items.push({ title, date, url: url }); // 상세 URL 없으므로 목록 URL 사용
+      // nttId 추출해서 상세 URL 구성
+      const nttIdMatch = tr.match(/nttId[=\(,\s'"]+(\d+)/i);
+      const detailUrl = nttIdMatch
+        ? `https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9565&bbsId=1154&nttId=${nttIdMatch[1]}`
+        : listUrl;
+      items.push({ title, date, url: detailUrl });
     }
     return items;
   } catch (e) {
@@ -195,58 +231,42 @@ async function fetchREB() {
   }
 }
 
-// ── 요약 생성 (제목 기반 bullet 생성) ────────────────
-function makeSummary(title) {
-  // 제목에서 키워드 기반 3개 bullet 생성
-  const bullets = [];
-  if (title.includes('금리') || title.includes('기준금리')) bullets.push('금리 관련 정책 발표 내용 포함');
-  if (title.includes('외환') || title.includes('환율')) bullets.push('외환시장 관련 조치 및 현황 안내');
-  if (title.includes('보험')) bullets.push('보험 제도 개선 및 감독 강화 방안 포함');
-  if (title.includes('투자') || title.includes('펀드')) bullets.push('투자상품 관련 규제 및 가이드라인 수록');
-  if (title.includes('대출') || title.includes('신용')) bullets.push('대출 및 신용 관련 제도 변경 사항 포함');
-  if (title.includes('가계')) bullets.push('가계부채 현황 및 관리 방안 제시');
-  if (title.includes('부동산') || title.includes('아파트') || title.includes('주택')) bullets.push('부동산 시장 동향 및 가격 지표 수록');
-  if (title.includes('연금') || title.includes('퇴직')) bullets.push('연금 제도 개선 및 운용 현황 포함');
-  if (title.includes('국제') || title.includes('수지')) bullets.push('국제 거래 현황 및 통계 제공');
-  if (title.includes('물가') || title.includes('인플레')) bullets.push('물가 동향 및 통화정책 연계 분석 수록');
-  if (title.includes('경상수지')) bullets.push('경상수지 흑자/적자 규모 및 구성 항목 분석');
-  if (title.includes('AI') || title.includes('디지털')) bullets.push('디지털 금융 혁신 관련 정책 방향 제시');
-
-  // 기본 bullet (부족할 때 보충)
-  if (bullets.length < 3) bullets.push('관련 제도·통계 현황 및 정책 방향 제시');
-  if (bullets.length < 3) bullets.push('담당 부처의 공식 입장 및 향후 계획 포함');
-  if (bullets.length < 3) bullets.push('세부 내용은 첨부 자료 또는 원문 링크 참조');
-
-  return bullets.slice(0, 3);
-}
-
 // ── 메인 핸들러 ────────────────────────────────────────
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // 병렬 수집
+    // 1단계: 목록 병렬 수집
     const [fscItems, fssItems, bokItems, rebItems] = await Promise.allSettled([
       fetchFSC(), fetchFSS(), fetchBOK(), fetchREB()
     ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
 
-    // 요약 추가
-    const addSummary = items => items.map(item => ({
-      ...item,
-      bullets: makeSummary(item.title)
-    }));
+    // 2단계: 상세 본문 병렬 수집 (FSC는 Naver description 사용)
+    const withSummary = async (items, useNoSSL = false) =>
+      Promise.all(items.map(async item => ({
+        ...item,
+        bullets: item.snippet
+          ? [item.snippet]                               // FSC: Naver description 그대로
+          : await fetchDetailSummary(item.url, useNoSSL) // 나머지: 상세 페이지 파싱
+      })));
+
+    const [fscOut, fssOut, bokOut, rebOut] = await Promise.all([
+      withSummary(fscItems, false),
+      withSummary(fssItems, false),
+      withSummary(bokItems, true),   // BOK: SSL 우회 필요
+      withSummary(rebItems, false),
+    ]);
 
     const data = {
       timestamp: new Date().toISOString(),
       institutions: {
-        fsc: { name: '금융위원회', items: addSummary(fscItems) },
-        fss: { name: '금융감독원', items: addSummary(fssItems) },
-        bok: { name: '한국은행',   items: addSummary(bokItems) },
-        reb: { name: '한국부동산원', items: addSummary(rebItems) }
+        fsc: { name: '금융위원회',  items: fscOut },
+        fss: { name: '금융감독원',  items: fssOut },
+        bok: { name: '한국은행',    items: bokOut },
+        reb: { name: '한국부동산원', items: rebOut }
       }
     };
 
