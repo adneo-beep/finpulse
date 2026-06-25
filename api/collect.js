@@ -1,8 +1,12 @@
 /**
  * FinPulse – /api/collect
  * 금융위원회·금융감독원·한국은행·한국부동산원 보도자료 수집
+ * FSS 상세 페이지는 JS 렌더링이므로 Playwright로 수집, nttId 기반 Blob 캐시 적용
  */
 import https from 'https';
+import { put, list } from '@vercel/blob';
+import chromium from '@sparticuz/chromium';
+import { chromium as playwrightCore } from 'playwright-core';
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -10,7 +14,9 @@ const HEADERS = {
   'Accept-Language': 'ko-KR,ko;q=0.9',
 };
 
-// SSL 인증서 검증 우회 fetch (일부 한국 정부 사이트 대응)
+const FSS_CACHE_KEY = 'fss-summary-cache.json';
+
+// ── SSL 우회 fetch ─────────────────────────────────────
 function fetchNoSSL(url, timeoutMs = 12000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
@@ -33,23 +39,16 @@ function fetchNoSSL(url, timeoutMs = 12000) {
 
 // ── 날짜 유틸 ──────────────────────────────────────────
 function todayMinus(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d;
+  const d = new Date(); d.setDate(d.getDate() - days); return d;
 }
-
 function parseDate(str) {
   if (!str) return null;
-  const s = str.replace(/\s/g, '').replace(/\./g, '-').replace(/-$/, '');
-  return new Date(s);
+  return new Date(str.replace(/\s/g, '').replace(/\./g, '-').replace(/-$/, ''));
 }
-
 function isWithin7Days(dateStr) {
   const d = parseDate(dateStr);
-  if (!d || isNaN(d.getTime())) return true;
-  return d >= todayMinus(7);
+  return !d || isNaN(d.getTime()) || d >= todayMinus(7);
 }
-
 function stripHtml(s) {
   return (s || '')
     .replace(/<[^>]+>/g, '')
@@ -58,18 +57,8 @@ function stripHtml(s) {
     .replace(/&#\d+;/g,'').trim();
 }
 
-// ── 본문 HTML → 첫 2~3문장 추출 ──────────────────────
-function cleanText(s) {
-  return (s || '')
-    .replace(/<("[^"]*"|'[^']*'|[^'">])*>/g, ' ') // 속성 안의 > 포함 처리
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&[a-z#][a-z0-9]*;/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
+// ── HTML → 요약 문장 추출 (BOK·REB용) ─────────────────
 function extractSentences(html, max = 3) {
-  // 비본문 제거
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -79,19 +68,17 @@ function extractSentences(html, max = 3) {
     .replace(/<!--[\s\S]*?-->/g, '');
 
   const isJunk = t =>
-    t.length < 25 ||
-    t.length > 500 ||
+    t.length < 25 || t.length > 500 ||
     /[|｜]/.test(t) ||
-    /바로가기|뉴스레터|Open API|관련사이트|계산기|피해구제|피해예방|불러오고 있습니다|잠시만 기다려/.test(t) ||
-    /role=["']img["']/.test(t) ||
+    /바로가기|뉴스레터|Open API|관련사이트|불러오고 있습니다|잠시만 기다려/.test(t) ||
     /^[\d\s\.\-\(\)]+$/.test(t);
 
-  // 1순위: <p> 태그 본문 (실제 내용이 담긴 태그)
+  // 1순위: <p> 태그
   const pTexts = [];
-  const pPattern = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  const pPat = /<p[^>]*>([\s\S]*?)<\/p>/gi;
   let m;
-  while ((m = pPattern.exec(cleaned)) !== null) {
-    const t = cleanText(m[1]);
+  while ((m = pPat.exec(cleaned)) !== null) {
+    const t = stripHtml(m[1]).replace(/\s+/g, ' ').trim();
     if (!isJunk(t)) pTexts.push(t);
   }
   if (pTexts.length >= 2) return pTexts.slice(0, max);
@@ -100,42 +87,123 @@ function extractSentences(html, max = 3) {
   const text = cleaned
     .replace(/<\/?(div|li|tr|th|td|h[1-6]|br)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&[a-z#][a-z0-9]*;/gi, '')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*/g, '\n')
-    .trim();
+    .replace(/&nbsp;/g, ' ').replace(/&[a-z#][a-z0-9]*;/gi, '')
+    .replace(/[ \t]+/g, ' ').replace(/\n\s*/g, '\n').trim();
 
   const seen = new Set();
-  return text
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => {
-      if (isJunk(l)) return false;
-      const key = l.slice(0, 15).replace(/\s/g, '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, max);
+  return text.split('\n').map(l => l.trim()).filter(l => {
+    if (isJunk(l)) return false;
+    const key = l.slice(0, 15).replace(/\s/g, '');
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  }).slice(0, max);
 }
 
-// ── 상세 페이지 본문 가져오기 ─────────────────────────
 async function fetchDetailSummary(url, useNoSSL = false) {
   try {
     const html = useNoSSL
       ? await fetchNoSSL(url, 8000)
       : await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000) }).then(r => r.text());
     return extractSentences(html);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
-// ── 1. 금융위원회 — 네이버 뉴스 (Naver description 사용) ──
+// ── FSS 캐시 (Vercel Blob) ─────────────────────────────
+async function loadFSSCache() {
+  try {
+    const { blobs } = await list({ prefix: FSS_CACHE_KEY });
+    if (!blobs.length) return {};
+    const res = await fetch(blobs[0].url);
+    return await res.json();
+  } catch { return {}; }
+}
+
+async function saveFSSCache(cache) {
+  try {
+    await put(FSS_CACHE_KEY, JSON.stringify(cache), {
+      access: 'public', addRandomSuffix: false, allowOverwrite: true,
+    });
+  } catch (e) { console.error('FSS cache save error:', e.message); }
+}
+
+// ── FSS Playwright 수집 ────────────────────────────────
+async function extractFSSContent(page) {
+  // 실제 본문이 로드될 때까지 대기 (JS 렌더링)
+  await page.waitForFunction(
+    () => {
+      const sel = '.view_cont, .bbs_view_cont, .board_view, #contarea, .cont_area';
+      const el = document.querySelector(sel);
+      return el && el.innerText.trim().length > 50;
+    },
+    { timeout: 12000 }
+  ).catch(() => {});
+
+  return page.evaluate(() => {
+    // 본문 컨테이너 후보 (FSS 사이트 구조)
+    const candidates = [
+      '.view_cont', '.bbs_view_cont', '.board_view .cont',
+      '#contarea', '.cont_area', '.view-cont',
+    ];
+    for (const sel of candidates) {
+      const el = document.querySelector(sel);
+      if (el && el.innerText.trim().length > 80) return el.innerText.trim();
+    }
+    // fallback: 가장 긴 <p> 들의 텍스트
+    const ps = [...document.querySelectorAll('p')]
+      .map(p => p.innerText.trim())
+      .filter(t => t.length > 30 && !t.includes('|'));
+    return ps.slice(0, 5).join('\n');
+  });
+}
+
+function contentToSentences(raw, max = 3) {
+  if (!raw) return [];
+  const lines = raw
+    .split(/\n+/)
+    .map(l => l.replace(/\s+/g, ' ').trim())
+    .filter(l => l.length > 20 && l.length < 400 && !/[|｜]/.test(l) && !/바로가기/.test(l));
+  const seen = new Set();
+  return lines.filter(l => {
+    const k = l.slice(0, 15).replace(/\s/g, '');
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  }).slice(0, max);
+}
+
+async function fetchFSSWithPlaywright(newItems) {
+  if (!newItems.length) return {};
+  let browser;
+  const results = {};
+  try {
+    browser = await playwrightCore.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+    // 순차 처리 (메모리 절약)
+    for (const item of newItems) {
+      const page = await browser.newPage();
+      try {
+        await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        const raw = await extractFSSContent(page);
+        results[item.nttId] = contentToSentences(raw);
+      } catch (e) {
+        console.error(`FSS Playwright error (${item.nttId}):`, e.message);
+        results[item.nttId] = [];
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    if (browser) await browser.close();
+  }
+  return results;
+}
+
+// ── 1. 금융위원회 ──────────────────────────────────────
 async function fetchFSC() {
   try {
-    const clientId     = process.env.NAVER_CLIENT_ID;
+    const clientId = process.env.NAVER_CLIENT_ID;
     const clientSecret = process.env.NAVER_CLIENT_SECRET;
     if (!clientId || !clientSecret) throw new Error('Naver API key missing');
     const sevenDaysAgo = todayMinus(7);
@@ -145,11 +213,10 @@ async function fetchFSC() {
       signal: AbortSignal.timeout(10000),
     });
     const json = await res.json();
-    const items = [];
-    const seenTitles = new Set();
+    const items = []; const seenTitles = new Set();
     for (const item of (json.items || [])) {
-      const title   = stripHtml(item.title);
-      const link    = item.originallink || item.link;
+      const title = stripHtml(item.title);
+      const link = item.originallink || item.link;
       const pubDate = new Date(item.pubDate);
       if (isNaN(pubDate.getTime()) || pubDate < sevenDaysAgo) continue;
       const titleKey = title.replace(/\s/g, '').slice(0, 15);
@@ -157,143 +224,107 @@ async function fetchFSC() {
       seenTitles.add(titleKey);
       const pad = n => String(n).padStart(2, '0');
       const date = `${pubDate.getFullYear()}-${pad(pubDate.getMonth()+1)}-${pad(pubDate.getDate())}`;
-      // Naver description은 이미 기사 첫 문장 스니펫
-      const snippet = stripHtml(item.description || '');
-      items.push({ title, date, url: link, snippet });
+      items.push({ title, date, url: link, bullets: [stripHtml(item.description || '')] });
       if (items.length >= 10) break;
     }
     return items;
   } catch (e) {
-    console.error('FSC(Naver) fetch error:', e.message);
-    return [];
+    console.error('FSC fetch error:', e.message); return [];
   }
 }
 
-// ── 2. 금융감독원 — 목록은 fss.or.kr, 요약은 제목별 Naver 개별 검색 ──
-// FSS 상세 페이지는 JS 렌더링으로 plain fetch 불가.
-// 각 항목 제목으로 Naver를 개별 검색해 제목에 정확히 매칭된 기사의 description 사용.
-async function naverSnippetForTitle(title) {
-  try {
-    const clientId     = process.env.NAVER_CLIENT_ID;
-    const clientSecret = process.env.NAVER_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return null;
-    const query = `금융감독원 ${title}`;
-    const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=5&sort=date`;
-    const res = await fetch(url, {
-      headers: { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret },
-      signal: AbortSignal.timeout(6000),
-    });
-    const json = await res.json();
-    const titleKey = title.replace(/\s/g, '');
-    for (const item of (json.items || [])) {
-      // fss.or.kr 직접 링크는 description이 사이드바 텍스트라 제외
-      const link = item.originallink || item.link || '';
-      if (link.includes('fss.or.kr')) continue;
-      const naverTitle = stripHtml(item.title).replace(/\s/g, '');
-      // 제목의 핵심 단어(앞 15자)가 Naver 결과 제목에 포함되면 매칭
-      if (naverTitle.includes(titleKey.slice(0, 15))) {
-        const desc = stripHtml(item.description || '').trim();
-        if (desc.length > 10) return desc;
-      }
-    }
-    return null;
-  } catch { return null; }
-}
-
+// ── 2. 금융감독원 (Playwright + Blob 캐시) ─────────────
 async function fetchFSS() {
   try {
-    const url = 'https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218';
-    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
+    const listUrl = 'https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218';
+    const res = await fetch(listUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
     const html = await res.text();
 
     const items = [];
-    const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
+    const trPat = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
     let trMatch;
-    while ((trMatch = trPattern.exec(html)) !== null) {
+    while ((trMatch = trPat.exec(html)) !== null) {
       const tr = trMatch[1];
-      const linkMatch = tr.match(/<a[^>]+href="(\/fss\/bbs\/B0000188\/view\.do\?nttId=\d+[^"]*)"[^>]*>([\s\S]*?)<\/a>/);
+      const linkMatch = tr.match(/<a[^>]+href="(\/fss\/bbs\/B0000188\/view\.do\?nttId=(\d+)[^"]*)"[^>]*>([\s\S]*?)<\/a>/);
       if (!linkMatch) continue;
-      const href  = 'https://www.fss.or.kr' + linkMatch[1];
-      const title = stripHtml(linkMatch[2]);
+      const href = 'https://www.fss.or.kr' + linkMatch[1];
+      const nttId = linkMatch[2];
+      const title = stripHtml(linkMatch[3]);
       if (!title || title.length < 5) continue;
       const dateMatch = tr.match(/(\d{4}-\d{2}-\d{2})/);
-      if (!dateMatch) continue;
-      const date = dateMatch[1];
-      if (!isWithin7Days(date)) continue;
-      items.push({ title, date, url: href });
+      if (!dateMatch || !isWithin7Days(dateMatch[1])) continue;
+      items.push({ title, date: dateMatch[1], url: href, nttId });
     }
 
-    // 각 항목마다 제목으로 개별 Naver 검색 (병렬)
-    const snippets = await Promise.all(items.map(i => naverSnippetForTitle(i.title)));
-    // skipDetailFetch: JS 렌더링 페이지라 fallback 금지 — Naver 없으면 빈 bullets
-    return items.map((i, idx) => ({ ...i, snippet: snippets[idx], skipDetailFetch: true }));
+    if (!items.length) return [];
+
+    // 캐시 로드 → 신규 항목만 Playwright 처리
+    const cache = await loadFSSCache();
+    const newItems = items.filter(i => !cache[i.nttId]);
+
+    if (newItems.length) {
+      const fetched = await fetchFSSWithPlaywright(newItems);
+      Object.assign(cache, fetched);
+      await saveFSSCache(cache);
+    }
+
+    return items.map(i => ({ ...i, bullets: cache[i.nttId] || [] }));
   } catch (e) {
-    console.error('FSS fetch error:', e.message);
-    return [];
+    console.error('FSS fetch error:', e.message); return [];
   }
 }
 
-// ── 3. 한국은행 (bok.or.kr) ────────────────────────────
+// ── 3. 한국은행 ────────────────────────────────────────
 async function fetchBOK() {
   try {
     const url = 'https://www.bok.or.kr/portal/singl/newsData/listCont.do?pageIndex=&targetDepth=3&menuNo=201263&syncMenuChekKey=1&depthSubMain=&subMainAt=&searchCnd=1&searchKwd=&depth2=200038&depth3=201263';
     const html = await fetchNoSSL(url);
-
-    const items = [];
-    const usedTitles = new Set();
-    const liPattern = /<li[^>]*bbsRowCls[^>]*>([\s\S]*?)<\/li>/g;
+    const items = []; const usedTitles = new Set();
+    const liPat = /<li[^>]*bbsRowCls[^>]*>([\s\S]*?)<\/li>/g;
     let liMatch;
-    while ((liMatch = liPattern.exec(html)) !== null) {
+    while ((liMatch = liPat.exec(html)) !== null) {
       const block = liMatch[1];
       const dateMatch = block.match(/<span class="date"[^>]*>[\s\S]*?(\d{4}\.\d{2}\.\d{2})/);
-      if (!dateMatch) continue;
-      const date = dateMatch[1].replace(/\./g, '-');
-      if (!isWithin7Days(date)) continue;
+      if (!dateMatch || !isWithin7Days(dateMatch[1])) continue;
       const linkMatch = block.match(/<a[^>]+href="(\/portal\/bbs\/[^"]+)"[^>]*class="title"[^>]*>([\s\S]*?)<\/a>/);
       if (!linkMatch) continue;
       const title = stripHtml(linkMatch[2].replace(/<!--[\s\S]*?-->/g, ''));
       if (!title || title.length < 3 || usedTitles.has(title)) continue;
       usedTitles.add(title);
-      items.push({ title, date, url: 'https://www.bok.or.kr' + linkMatch[1] });
+      items.push({ title, date: dateMatch[1].replace(/\./g, '-'), url: 'https://www.bok.or.kr' + linkMatch[1] });
     }
     return items;
   } catch (e) {
-    console.error('BOK fetch error:', e.message);
-    return [];
+    console.error('BOK fetch error:', e.message); return [];
   }
 }
 
-// ── 4. 한국부동산원 (reb.or.kr) ───────────────────────
+// ── 4. 한국부동산원 ────────────────────────────────────
 async function fetchREB() {
   try {
     const listUrl = 'https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9565&bbsId=1154';
     const res = await fetch(listUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
     const html = await res.text();
-
     const items = [];
-    const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
+    const trPat = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
     let trMatch;
-    while ((trMatch = trPattern.exec(html)) !== null) {
+    while ((trMatch = trPat.exec(html)) !== null) {
       const tr = trMatch[1];
       const linkMatch = tr.match(/<a[^>]*>([\s\S]*?)<\/a>/);
       if (!linkMatch) continue;
       const title = stripHtml(linkMatch[1]).replace(/새글/g, '').trim();
       if (!title || title.length < 5) continue;
       const dateMatch = tr.match(/(\d{4}\.\d{2}\.\d{2})/);
-      if (!dateMatch) continue;
-      const date = dateMatch[1].replace(/\./g, '-');
-      if (!isWithin7Days(date)) continue;
-      // nttId 추출해서 상세 URL 구성
+      if (!dateMatch || !isWithin7Days(dateMatch[1])) continue;
       const nttIdMatch = tr.match(/nttId[=\(,\s'"]+(\d+)/i);
       const detailUrl = nttIdMatch
         ? `https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9565&bbsId=1154&nttId=${nttIdMatch[1]}`
         : listUrl;
-      items.push({ title, date, url: detailUrl });
+      items.push({ title, date: dateMatch[1].replace(/\./g, '-'), url: detailUrl });
     }
     return items;
   } catch (e) {
-    console.error('REB fetch error:', e.message);
-    return [];
+    console.error('REB fetch error:', e.message); return [];
   }
 }
 
@@ -305,40 +336,34 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // 1단계: 목록 병렬 수집
+    // 1단계: 목록 + FSS(Playwright+캐시) 병렬 수집
     const [fscItems, fssItems, bokItems, rebItems] = await Promise.allSettled([
       fetchFSC(), fetchFSS(), fetchBOK(), fetchREB()
-    ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
+    ]).then(r => r.map(x => x.status === 'fulfilled' ? x.value : []));
 
-    // 2단계: 상세 본문 병렬 수집 (FSC는 Naver description 사용)
-    const withSummary = async (items, useNoSSL = false) =>
+    // 2단계: BOK·REB 상세 본문 수집 (FSC·FSS는 이미 bullets 포함)
+    const addDetail = async (items, useNoSSL = false) =>
       Promise.all(items.map(async item => ({
         ...item,
-        bullets: item.snippet
-          ? [item.snippet]                                        // Naver description 사용
-          : item.skipDetailFetch
-            ? []                                                  // JS 렌더링 페이지 — 빈 bullets
-            : await fetchDetailSummary(item.url, useNoSSL)        // 상세 페이지 파싱
+        bullets: item.bullets ?? await fetchDetailSummary(item.url, useNoSSL),
       })));
 
     const [fscOut, fssOut, bokOut, rebOut] = await Promise.all([
-      withSummary(fscItems, false),
-      withSummary(fssItems, false),
-      withSummary(bokItems, true),   // BOK: SSL 우회 필요
-      withSummary(rebItems, false),
+      Promise.resolve(fscItems),            // FSC: bullets 이미 있음
+      Promise.resolve(fssItems),            // FSS: Playwright bullets 이미 있음
+      addDetail(bokItems, true),            // BOK: SSL 우회
+      addDetail(rebItems, false),           // REB
     ]);
 
-    const data = {
+    res.status(200).json({
       timestamp: new Date().toISOString(),
       institutions: {
-        fsc: { name: '금융위원회',  items: fscOut },
-        fss: { name: '금융감독원',  items: fssOut },
-        bok: { name: '한국은행',    items: bokOut },
-        reb: { name: '한국부동산원', items: rebOut }
-      }
-    };
-
-    res.status(200).json(data);
+        fsc: { name: '금융위원회',   items: fscOut },
+        fss: { name: '금융감독원',   items: fssOut },
+        bok: { name: '한국은행',     items: bokOut },
+        reb: { name: '한국부동산원', items: rebOut },
+      },
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
