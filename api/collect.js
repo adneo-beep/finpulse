@@ -225,7 +225,8 @@ async function fetchFSS() {
 
     // 각 항목마다 제목으로 개별 Naver 검색 (병렬)
     const snippets = await Promise.all(items.map(i => naverSnippetForTitle(i.title)));
-    return items.map((i, idx) => ({ ...i, snippet: snippets[idx] }));
+    // skipDetailFetch: JS 렌더링 페이지라 fallback 금지 — Naver 없으면 빈 bullets
+    return items.map((i, idx) => ({ ...i, snippet: snippets[idx], skipDetailFetch: true }));
   } catch (e) {
     console.error('FSS fetch error:', e.message);
     return [];
@@ -314,8 +315,10 @@ export default async function handler(req, res) {
       Promise.all(items.map(async item => ({
         ...item,
         bullets: item.snippet
-          ? [item.snippet]                               // FSC: Naver description 그대로
-          : await fetchDetailSummary(item.url, useNoSSL) // 나머지: 상세 페이지 파싱
+          ? [item.snippet]                                        // Naver description 사용
+          : item.skipDetailFetch
+            ? []                                                  // JS 렌더링 페이지 — 빈 bullets
+            : await fetchDetailSummary(item.url, useNoSSL)        // 상세 페이지 파싱
       })));
 
     const [fscOut, fssOut, bokOut, rebOut] = await Promise.all([
