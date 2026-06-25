@@ -61,7 +61,7 @@ function stripHtml(s) {
 // ── 본문 HTML → 첫 2~3문장 추출 ──────────────────────
 function cleanText(s) {
   return (s || '')
-    .replace(/<[^>]+>/g, ' ')
+    .replace(/<("[^"]*"|'[^']*'|[^'">])*>/g, ' ') // 속성 안의 > 포함 처리
     .replace(/&nbsp;/g, ' ')
     .replace(/&[a-z#][a-z0-9]*;/gi, '')
     .replace(/\s+/g, ' ')
@@ -82,7 +82,8 @@ function extractSentences(html, max = 3) {
     t.length < 25 ||
     t.length > 500 ||
     /[|｜]/.test(t) ||
-    /바로가기|뉴스레터|Open API|관련사이트|계산기|피해구제|피해예방/.test(t) ||
+    /바로가기|뉴스레터|Open API|관련사이트|계산기|피해구제|피해예방|불러오고 있습니다|잠시만 기다려/.test(t) ||
+    /role=["']img["']/.test(t) ||
     /^[\d\s\.\-\(\)]+$/.test(t);
 
   // 1순위: <p> 태그 본문 (실제 내용이 담긴 태그)
@@ -168,7 +169,34 @@ async function fetchFSC() {
   }
 }
 
-// ── 2. 금융감독원 (fss.or.kr) ─────────────────────────
+// ── 2. 금융감독원 — 목록은 fss.or.kr, 요약은 Naver 검색 ──
+// FSS 상세 페이지는 JS 렌더링으로 plain fetch 불가. Naver 검색 description 활용.
+async function fetchFSSSnippets(titles) {
+  try {
+    const clientId     = process.env.NAVER_CLIENT_ID;
+    const clientSecret = process.env.NAVER_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return {};
+    const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent('금융감독원 보도자료')}&display=30&sort=date`;
+    const res = await fetch(url, {
+      headers: { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret },
+      signal: AbortSignal.timeout(8000),
+    });
+    const json = await res.json();
+    // 제목 앞 10글자로 매칭
+    const map = {};
+    for (const item of (json.items || [])) {
+      const naverTitle = stripHtml(item.title).replace(/\s/g, '');
+      for (const title of titles) {
+        const key = title.replace(/\s/g, '').slice(0, 10);
+        if (naverTitle.includes(key) && !map[title]) {
+          map[title] = stripHtml(item.description || '');
+        }
+      }
+    }
+    return map;
+  } catch { return {}; }
+}
+
 async function fetchFSS() {
   try {
     const url = 'https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218';
@@ -191,7 +219,13 @@ async function fetchFSS() {
       if (!isWithin7Days(date)) continue;
       items.push({ title, date, url: href });
     }
-    return items;
+
+    // Naver에서 요약 스니펫 보강
+    const snippetMap = await fetchFSSSnippets(items.map(i => i.title));
+    return items.map(i => ({
+      ...i,
+      snippet: snippetMap[i.title] || null,
+    }));
   } catch (e) {
     console.error('FSS fetch error:', e.message);
     return [];
