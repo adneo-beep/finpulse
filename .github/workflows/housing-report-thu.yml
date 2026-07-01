@@ -1,0 +1,29 @@
+name: Housing Report - Thursday (REB)
+
+on:
+  schedule:
+    - cron: '0 5 * * 4'  # 14:00 KST 목요일 (UTC+9)
+  workflow_dispatch:  # 수동 실행
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Generate and send report (Sheet1+3, REB only)
+        run: node price-detail-email.mjs --mode=thu
+        env:
+          RBONE_KEY: ${{ secrets.RBONE_KEY }}
+          NAVER_APP_PASS: ${{ secrets.NAVER_APP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
