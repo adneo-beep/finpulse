@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/finpulse.html" }
+    { "source": "/", "destination": "/finpulse.html" },
+    { "source": "/law-monitor", "destination": "/law-monitor.html" }
   ],
   "functions": {
     "api/collect.js": {
@@ -8,6 +9,10 @@
       "maxDuration": 60
     },
     "api/debug.js": {
+      "regions": ["icn1"],
+      "maxDuration": 30
+    },
+    "api/law-monitor.js": {
       "regions": ["icn1"],
       "maxDuration": 30
     }
