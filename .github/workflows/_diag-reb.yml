@@ -1,0 +1,44 @@
+name: Diag - REB API connectivity from runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm init -y && npm install axios
+        working-directory: /tmp
+
+      - name: Hit R-ONE API 150x like the real script does
+        env:
+          RBONE_KEY: ${{ secrets.RBONE_KEY }}
+        run: |
+          node -e "
+          const axios = require('axios');
+          (async () => {
+            const RBONE_URL = 'https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do';
+            const SALE_ID = 'T244183132827305';
+            const ids = Array.from({length:30}, (_,i)=>50043+i);
+            const weeks = ['202624','202625','202626','202627'];
+            const start = Date.now();
+            const results = await Promise.all(ids.flatMap(id => weeks.map(async w => {
+              try {
+                const r = await axios.get(RBONE_URL, { params: { STATBL_ID: SALE_ID, DTACYCLE_CD:'WK', apiKey: process.env.RBONE_KEY, WRTTIME_IDTFR_ID: w, CLS_ID: String(id) }, timeout: 10000 });
+                const xml = String(r.data);
+                return /<DTA_VAL>/.test(xml) ? 'ok' : 'nodata';
+              } catch (e) { return 'ERR:' + (e.code || e.message); }
+            })));
+            const okCount = results.filter(r=>r==='ok').length;
+            const nodataCount = results.filter(r=>r==='nodata').length;
+            const errCount = results.length - okCount - nodataCount;
+            console.log('total', results.length, 'ok', okCount, 'nodata', nodataCount, 'err', errCount, 'took', Date.now()-start, 'ms');
+            const errs = results.filter(r => r.startsWith('ERR')).slice(0, 10);
+            console.log('sample errors:', JSON.stringify(errs));
+          })();
+          "
+        working-directory: /tmp
