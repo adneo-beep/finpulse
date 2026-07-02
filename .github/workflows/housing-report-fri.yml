@@ -2,7 +2,7 @@ name: Housing Report - Friday (Full)
 
 on:
   schedule:
-    - cron: '0 5 * * 5'  # 14:00 KST 금요일 (UTC+9)
+    - cron: '5 5 * * 5'  # 14:05 KST 금요일 (UTC+9) — 정각(분=0)은 GitHub 큐 지연/스킵이 잦아 5분 오프셋
   workflow_dispatch:  # 수동 실행
 
 jobs:
